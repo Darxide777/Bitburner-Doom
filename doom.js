@@ -2,7 +2,7 @@
  * If you don't have singularity access then you'll need 64 GB 
  * ram on home server to run this, otherwise it's less than 5GB.
  * 
- * ]DOOM — Bitburner Edition
+ * DOOM — Bitburner Edition
  * E1M1: Hangar
  *
  * CONTROLS:
@@ -249,6 +249,7 @@ export async function main(ns) {
   let running = true;
   function cleanup() {
     running = false;
+    try { musicSrc.stop(); } catch (e) { }
     root.remove();
     doc.removeEventListener('keydown', onKey);
     doc.removeEventListener('keyup', onKey);
@@ -272,31 +273,32 @@ export async function main(ns) {
   }
 
   // ─── AUDIO ──────────────────────────────────────────────────────────────────
-const audioData = JSON.parse(ns.read("audio.json"));
+  const audioCtx = new (eval('window').AudioContext || eval('window').webkitAudioContext)();
+  const audioData = JSON.parse(ns.read("audio.json"));
 
-const SFX_HURT = `data:audio/wav;base64,${audioData.playerinjured}`;
-const SFX_PISTOL = `data:audio/wav;base64,${audioData.pistol}`;
-const SFX_DOOR = `data:audio/wav;base64,${audioData.door}`;
-const SFX_SHOTGUN = `data:audio/wav;base64,${audioData.shotgun}`;
-const SFX_DemonDeath = `data:audio/wav;base64,${audioData.demondeath}`;
-const SFX_ZombieInjured = `data:audio/wav;base64,${audioData.zombieinjured}`;
-const SFX_CacodemonDeath = `data:audio/wav;base64,${audioData.cacodemondeath}`;
-const SFX_ImpAttack = `data:audio/wav;base64,${audioData.impattack}`;
-const SFX_CyberDemonDeath = `data:audio/wav;base64,${audioData.cyberdemondeath}`;
-const SFX_LostSoulInjured = `data:audio/wav;base64,${audioData.lostsoulinjured}`;
-const SFX_LostSoulDeath = `data:audio/wav;base64,${audioData.lostsouldeath}`;
-const SFX_DemonInjured = `data:audio/wav;base64,${audioData.demoninjured}`;
-const SFX_DemonAttack = `data:audio/wav;base64,${audioData.demonattack}`;
-const SFX_CacodemonInjured = `data:audio/wav;base64,${audioData.cacodemoninjured}`;
-const SFX_ImpInjured = `data:audio/wav;base64,${audioData.impinjured}`;
-const SFX_ZombieDeath = `data:audio/wav;base64,${audioData.zombiedeath}`;
-const SFX_CyberdemonAttack = `data:audio/wav;base64,${audioData.cyberdemonattack}`;
-const SFX_CyberdemonInjured = `data:audio/wav;base64,${audioData.cyberdemoninjured}`;
-const SFX_CacodemonAttack = `data:audio/wav;base64,${audioData.cacodemonattack}`;
-const SFX_LevelTheme = `data:audio/wav;base64,${audioData.level}`;
-const SFX_ImpDeath = `data:audio/wav;base64,${audioData.impdeath}`;
-const SFX_LostsoulsAttack = `data:audio/wav;base64,${audioData.lostsoulattack}`;
-const SFX_PlayerDeath = `data:audio/wav;base64,${audioData.playerdeath}`;
+  const SFX_HURT = `data:audio/wav;base64,${audioData.playerinjured}`;
+  const SFX_PISTOL = `data:audio/wav;base64,${audioData.pistol}`;
+  const SFX_DOOR = `data:audio/wav;base64,${audioData.door}`;
+  const SFX_SHOTGUN = `data:audio/wav;base64,${audioData.shotgun}`;
+  const SFX_DemonDeath = `data:audio/wav;base64,${audioData.demondeath}`;
+  const SFX_ZombieInjured = `data:audio/wav;base64,${audioData.zombieinjured}`;
+  const SFX_CacodemonDeath = `data:audio/wav;base64,${audioData.cacodemondeath}`;
+  const SFX_ImpAttack = `data:audio/wav;base64,${audioData.impattack}`;
+  const SFX_CyberDemonDeath = `data:audio/wav;base64,${audioData.cyberdemondeath}`;
+  const SFX_LostSoulInjured = `data:audio/wav;base64,${audioData.lostsoulinjured}`;
+  const SFX_LostSoulDeath = `data:audio/wav;base64,${audioData.lostsouldeath}`;
+  const SFX_DemonInjured = `data:audio/wav;base64,${audioData.demoninjured}`;
+  const SFX_DemonAttack = `data:audio/wav;base64,${audioData.demonattack}`;
+  const SFX_CacodemonInjured = `data:audio/wav;base64,${audioData.cacodemoninjured}`;
+  const SFX_ImpInjured = `data:audio/wav;base64,${audioData.impinjured}`;
+  const SFX_ZombieDeath = `data:audio/wav;base64,${audioData.zombiedeath}`;
+  const SFX_CyberdemonAttack = `data:audio/wav;base64,${audioData.cyberdemonattack}`;
+  const SFX_CyberdemonInjured = `data:audio/wav;base64,${audioData.cyberdemoninjured}`;
+  const SFX_CacodemonAttack = `data:audio/wav;base64,${audioData.cacodemonattack}`;
+  const SFX_LevelTheme = `data:audio/wav;base64,${audioData.level}`;
+  const SFX_ImpDeath = `data:audio/wav;base64,${audioData.impdeath}`;
+  const SFX_LostsoulsAttack = `data:audio/wav;base64,${audioData.lostsoulattack}`;
+  const SFX_PlayerDeath = `data:audio/wav;base64,${audioData.playerdeath}`;
 
 
   async function loadSound(dataUrl) {
@@ -393,6 +395,27 @@ const SFX_PlayerDeath = `data:audio/wav;base64,${audioData.playerdeath}`;
           if (!e.alive) continue;
           if (Math.abs(e.x - rx) < 0.6 && Math.abs(e.y - ry) < 0.6) {
             e.hp -= wpn.damage;
+            // hurt sound
+            if (e.hp > 0) {
+              const hurtSfx = e.type === 'ZOMBIE' ? zombieInjuredBuffer :
+                e.type === 'IMP' ? impInjuredBuffer :
+                  e.type === 'DEMON' ? demonInjuredBuffer :
+                    e.type === 'CACODEMON' ? cacodemonInjuredBuffer :
+                      e.type === 'LOSTSOUL' ? lostSoulInjuredBuffer :
+                        e.type === 'CYBERDEMON' ? cyberdemonInjuredBuffer : null;
+              if (hurtSfx) playSound(hurtSfx, 0.7);
+            }
+            if (e.hp <= 0) {
+              e.alive = false; kills++;
+              const deathSfx = e.type === 'ZOMBIE' ? zombieDeathBuffer :
+                e.type === 'IMP' ? impDeathBuffer :
+                  e.type === 'DEMON' ? demonDeathBuffer :
+                    e.type === 'CACODEMON' ? cacodemonDeathBuffer :
+                      e.type === 'LOSTSOUL' ? lostSoulDeathBuffer :
+                        e.type === 'CYBERDEMON' ? cyberDemonDeathBuffer : null;
+              if (deathSfx) playSound(deathSfx, 1.0);
+
+            }
             // Spawn damage number
             const sp = projectSprite(e.x, e.y);
             if (sp) damageNumbers.push({ screenX: sp.screenX, screenY: Math.floor((H - sp.h) / 2) - 1, val: wpn.damage, ttl: 20 });
@@ -936,11 +959,42 @@ const SFX_PlayerDeath = `data:audio/wav;base64,${audioData.playerdeath}`;
   }
   keys['Escape'] = false; keys['Enter'] = false; keys[' '] = false;
   if (!running) { cleanup(); return; }
-  const audioCtx = new (eval('window').AudioContext || eval('window').webkitAudioContext)();
+
   const hurtBuffer = await loadSound(SFX_HURT);
   const doorBuffer = await loadSound(SFX_DOOR);
   const pistolBuffer = await loadSound(SFX_PISTOL);
   const shotgunBuffer = await loadSound(SFX_SHOTGUN);
+  const demonDeathBuffer = await loadSound(SFX_DemonDeath);
+  const zombieInjuredBuffer = await loadSound(SFX_ZombieInjured);
+  const cacodemonDeathBuffer = await loadSound(SFX_CacodemonDeath);
+  const impAttackBuffer = await loadSound(SFX_ImpAttack);
+  const cyberDemonDeathBuffer = await loadSound(SFX_CyberDemonDeath);
+  const lostSoulInjuredBuffer = await loadSound(SFX_LostSoulInjured);
+  const lostSoulDeathBuffer = await loadSound(SFX_LostSoulDeath);
+  const demonInjuredBuffer = await loadSound(SFX_DemonInjured);
+  const demonAttackBuffer = await loadSound(SFX_DemonAttack);
+  const cacodemonInjuredBuffer = await loadSound(SFX_CacodemonInjured);
+  const impInjuredBuffer = await loadSound(SFX_ImpInjured);
+  const zombieDeathBuffer = await loadSound(SFX_ZombieDeath);
+  const cyberdemonAttackBuffer = await loadSound(SFX_CyberdemonAttack);
+  const cyberdemonInjuredBuffer = await loadSound(SFX_CyberdemonInjured);
+  const cacodemonAttackBuffer = await loadSound(SFX_CacodemonAttack);
+  const impDeathBuffer = await loadSound(SFX_ImpDeath);
+  const lostSoulAttackBuffer = await loadSound(SFX_LostsoulsAttack);
+  const playerDeathBuffer = await loadSound(SFX_PlayerDeath);
+  const levelThemeBuffer = await loadSound(SFX_LevelTheme);
+
+  //Music Loop
+
+  const musicSrc = audioCtx.createBufferSource();
+  musicSrc.buffer = levelThemeBuffer;
+  musicSrc.loop = true;
+  const musicGain = audioCtx.createGain();
+  musicGain.gain.value = 0.4;
+  musicSrc.connect(musicGain);
+  musicGain.connect(audioCtx.destination);
+  musicSrc.start();
+
   gameStartTime = Date.now();
   hud.style.display = 'flex';
   face.style.visibility = 'visible';
@@ -1000,7 +1054,7 @@ const SFX_PlayerDeath = `data:audio/wav;base64,${audioData.playerdeath}`;
           flashMsg = health < 30 ? 'CRITICAL!' : 'HIT!';
           flashTimer = 20;
           updateHud();
-          if (health <= 0) { gameOver = true; flashMsg = 'YOU DIED'; flashTimer = 9999; }
+          if (health <= 0) { gameOver = true; flashMsg = 'YOU DIED'; flashTimer = 9999; playSound(playerDeathBuffer, 1.0); }
         }
       }
       projectiles.splice(0, projectiles.length, ...projectiles.filter(p => p.alive));
@@ -1053,6 +1107,7 @@ const SFX_PlayerDeath = `data:audio/wav;base64,${audioData.playerdeath}`;
                 e.chargeTimer--;
                 if (e.chargeTimer === 0) {
                   const angle = Math.atan2(py - e.y, px - e.x);
+                  playSound(cyberdemonAttackBuffer, 1.0);
                   projectiles.push({
                     x: e.x, y: e.y,
                     dx: Math.cos(angle) * 0.14,
@@ -1083,6 +1138,7 @@ const SFX_PlayerDeath = `data:audio/wav;base64,${audioData.playerdeath}`;
         if (e.type === 'LOSTSOUL') {
           if (dist < 8 && Math.random() < 0.035 && hasLineOfSight(e.x, e.y, px, py)) {
             const angle = Math.atan2(py - e.y, px - e.x);
+            playSound(lostSoulAttackBuffer, 0.7);
             projectiles.push({
               x: e.x, y: e.y,
               dx: Math.cos(angle) * 0.18,
@@ -1130,6 +1186,10 @@ const SFX_PlayerDeath = `data:audio/wav;base64,${audioData.playerdeath}`;
         const atkRange = e.type === 'CYBERDEMON' ? 1.5 : 0.8;
         const atkRate = e.type === 'CYBERDEMON' ? 0.04 : e.type === 'CACODEMON' ? 0.025 : 0.018;
         if (dist < atkRange && Math.random() < atkRate && hasLineOfSight(e.x, e.y, px, py)) {
+          const atkSfx = e.type === 'CACODEMON' ? cacodemonAttackBuffer :
+            e.type === 'DEMON' ? demonAttackBuffer :
+              e.type === 'CYBERDEMON' ? cyberdemonAttackBuffer : null;
+          if (atkSfx) playSound(atkSfx, 0.8);
           const dmg = e.type === 'CYBERDEMON' ? 20 : e.type === 'CACODEMON' ? 8 : e.type === 'DEMON' ? 9 : e.type === 'IMP' ? 6 : 4;
           health = Math.max(0, health - dmg);
           playSound(hurtBuffer, 0.8);
@@ -1139,7 +1199,7 @@ const SFX_PlayerDeath = `data:audio/wav;base64,${audioData.playerdeath}`;
           flashMsg = e.type === 'CYBERDEMON' ? `CYBERDEMON HIT! -${dmg}` : health < 30 ? 'CRITICAL!' : 'HIT!';
           flashTimer = 20;
           updateHud();
-          if (health <= 0) { gameOver = true; flashMsg = 'YOU DIED'; flashTimer = 9999; }
+          if (health <= 0) { gameOver = true; flashMsg = 'YOU DIED'; flashTimer = 9999; playSound(playerDeathBuffer, 1.0); }
         }
       }
 
