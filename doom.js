@@ -26,21 +26,28 @@ export async function main(ns) {
 
   // ─── AUTO UPDATE ─────────────────────────────────────────────────────────
   const VERSION = '8';
-  const GIST_ID = '8c7dccdb1cf489cb37f7a8c4cb478f3a';
-  const GIST_FILE = 'Doom.js';
-  //const RAW_URL = `https://gist.githubusercontent.com/Darxide111/8c7dccdb1cf489cb37f7a8c4cb478f3a/raw/Doom.js`;
-  const API_URL = `https://api.github.com/gists/${GIST_ID}`;
+  const REPO_USER = 'Darxide111';
+  const REPO_NAME = 'Bitburner-Doom';
+  const BRANCH = 'main';
+  const RAW_BASE = `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/${BRANCH}`;
 
   try {
-    const res = await fetch(API_URL);
-    const data = await res.json();
-    const remote = data.files[GIST_FILE].content;
+    const res = await fetch(`${RAW_BASE}/doom.js`);
+    const remote = await res.text();
     const match = remote.match(/const VERSION = '([^']+)'/);
     const remoteVersion = match ? match[1] : null;
 
     if (remoteVersion && remoteVersion !== VERSION) {
       ns.tprint(`UPDATE: New version ${remoteVersion} available. Updating...`);
       await ns.write('doom.js', remote, 'w');
+
+      // also update supporting files
+      const audio = await fetch(`${RAW_BASE}/audio.json`);
+      await ns.write('audio.json', await audio.text(), 'w');
+
+      const map = await fetch(`${RAW_BASE}/map.txt`);
+      await ns.write('map.txt', await map.text(), 'w');
+
       ns.tprint('Update complete. Restarting...');
       ns.exec('doom.js', 'home');
       return;
