@@ -25,8 +25,8 @@ export async function main(ns) {
   ns.disableLog('ALL');
 
   // ─── AUTO UPDATE ─────────────────────────────────────────────────────────
-  const VERSION = '8';
-  const REPO_USER = 'Darxide111';
+  const VERSION = '11';
+  const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
   const RAW_BASE = `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/${BRANCH}`;
