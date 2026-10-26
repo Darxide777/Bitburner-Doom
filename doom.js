@@ -25,7 +25,7 @@ export async function main(ns) {
   ns.disableLog('ALL');
 
   // ─── AUTO UPDATE ─────────────────────────────────────────────────────────
-  const VERSION = '9';
+  const VERSION = '10';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
