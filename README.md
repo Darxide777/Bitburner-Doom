@@ -23,3 +23,5 @@ d = demon
 z = zombie
 
 l = lost soul
+
+E = level end
