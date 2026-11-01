@@ -186,7 +186,7 @@ const LEVELS = [
 // Names of the sounds the game itself plays (keys in audio.json)
 // Only the sounds the ENGINE itself triggers. Enemy, weapon, pickup and projectile sounds are named inside their
 // own tables. All of them are looked up by name in audio.json by play(); see SOUND_FALLBACKS.
-const SOUNDS = { hurt: 'playerinjured', death: 'playerdeath', door: 'door', music: 'level', weaponPickup: 'weaponpickup' };
+const SOUNDS = { hurt: 'playerinjured', death: 'playerdeath', door: 'door', music: 'level', weaponPickup: 'weaponpickup', spawn: 'teleport' };
 
 // PLACEHOLDER SOUNDS. If the sound on the left is not in audio.json yet, the one on the right plays instead.
 // To replace a placeholder, just add the left-hand name to audio.json (base64 wav): it takes over by itself.
@@ -532,6 +532,8 @@ const PROJECTILES = {
 //  spawnable  false = an 'any' spawner never picks this type (Arch-vile so it can't summon more Arch-viles)
 //  spawnWeight  relative chance of being picked by an 'any' spawner (default 1; bosses are rare)
 //  painChance chance (0-1) that a hit makes it flinch for TUNING.painTicks (no moving or attacking)
+//  flee          { dist, ticks } makes the enemy run AWAY from a player it can see: whenever the player is closer than `dist`
+//                tiles, and for `ticks` ticks after every successful summon. Used by the spawners so they can't be picked off.
 //  stopDistance  while chasing a player it can see, it stops this many tiles away instead of walking into you
 //                (melee enemies set it just inside their bite range; 0 = keep pushing in)
 //  wakeOnDoor    true = when the player opens a door into the room this enemy is in, it charges at the player
@@ -737,8 +739,8 @@ const ENEMIES = {
   },
   // Spawners: no attack of their own, they summon enemies near themselves while they can see you.
   PAINELEMENTAL: {
-    mapChar: 'L', hp: 6, points: 400, killMsg: '** PAIN ELEMENTAL DESTROYED **',
-    speed: 0.008, sight: 16, roam: 12, hitbox: 1.0, painChance: 0.2,
+    mapChar: 'L', hp: 20, points: 400, killMsg: '** PAIN ELEMENTAL DESTROYED **',
+    speed: 0.012, sight: 16, roam: 12, hitbox: 1.0, painChance: 0.2, flee: { dist: 8, ticks: 60 },
     render: { zoom: 5, fall: 2.0, float: true }, spawnWeight: 0.5,
     blob: { tag: '\x1A', chars: '@O*.', size: 1.0 },
     sounds: { hurt: 'painelementalinjured', death: 'painelementaldeath' },
@@ -747,10 +749,10 @@ const ENEMIES = {
     ],
   },
   ARCHVILE: {
-    mapChar: 'V', hp: 14, points: 1000, killMsg: '** ARCH-VILE BANISHED **',
+    mapChar: 'V', hp: 40, points: 1000, killMsg: '** ARCH-VILE BANISHED **',
     // Fast and keeps its distance (stopDistance) while it summons a random enemy from anywhere in the game.
     // spawnable: false so it can never summon another Arch-vile.
-    speed: 0.03, sight: 20, roam: 25, hitbox: 0.7, painChance: 0.1, stopDistance: 6, relentless: true, spawnable: false,
+    speed: 0.03, sight: 20, roam: 25, hitbox: 0.7, painChance: 0.1, stopDistance: 9, flee: { dist: 7, ticks: 70 }, relentless: true, spawnable: false,
     render: { zoom: 4.3, fall: 1.0 },
     blob: { tag: '\x19', chars: '@O*.', size: 0.6 },
     sounds: { hurt: 'archvileinjured', death: 'archviledeath' },
@@ -857,7 +859,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '61';
+  const VERSION = '63';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -3190,6 +3192,7 @@ export async function main(ns) {
         const m = makeEnemy(p.type, p.x, p.y);
         m.spawned = true; m.memX = px; m.memY = py; m.memTicks = TUNING.alertMemoryTicks;
         enemies.push(m); p.parent.kids.push(m);
+        playAt(SOUNDS.spawn, p.x, p.y, 1.0);   // the enemy teleports in
         effects.push({ x: p.x, y: p.y, ttl: 8, sprite: false, anim: 'impact', blob: { tag: '\x19', chars: '*+.', size: 0.9 } });
       }
     }
@@ -3266,6 +3269,7 @@ export async function main(ns) {
   // immediately through hurtPlayer(), or (kind 'spawn') summons enemies via trySpawn().
   function enemyAttack(e, atk) {
     if (atk.kind === 'spawn' && !trySpawn(e, atk)) return;   // nothing summoned: no sound, no animation
+    if (atk.kind === 'spawn' && e.def.flee) e.fleeTicks = e.def.flee.ticks;   // back away after summoning
     if (atk.sound) playAt(atk.sound, e.x, e.y, atk.volume ?? 0.8);
     if (atk.animate !== false) { e.isAttacking = true; e.attackTimer = ATTACK_ANIM_TICKS; }
     if (atk.kind === 'ranged') {
@@ -3307,7 +3311,17 @@ export async function main(ns) {
     const spawnDist = Math.hypot(e.x - e.spawnX, e.y - e.spawnY);
     if (spd > 0 && spawnDist < def.roam) {
       if (sees) {
-        if (dist > def.stopDistance) moveEnemy(e, dx, dy, dist, spd);   // else: already in biting range, hold and attack
+        if (def.flee && (e.fleeTicks > 0 || dist < def.flee.dist)) {
+          // Run directly away from the player; if a wall blocks that, slide along it (try both sideways directions)
+          if (e.fleeTicks > 0) e.fleeTicks--;
+          const ox = e.x, oy = e.y;
+          moveEnemy(e, -dx, -dy, dist, spd);
+          if (e.x === ox && e.y === oy) {
+            const s1 = (e.id ?? 0) % 2 ? 1 : -1;
+            moveEnemy(e, -dy * s1, dx * s1, dist, spd);
+            if (e.x === ox && e.y === oy) moveEnemy(e, dy * s1, -dx * s1, dist, spd);
+          }
+        } else if (dist > def.stopDistance) moveEnemy(e, dx, dy, dist, spd);   // else: already in biting range, hold and attack
       } else if (e.memTicks > 0) {
         // Cannot see the player: go to the remembered spot along a found route (straight line only if no route is
         // known). A `relentless` enemy instead keeps tracking where the player is NOW until its memory runs out.
