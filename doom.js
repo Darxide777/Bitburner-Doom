@@ -853,7 +853,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '57';
+  const VERSION = '58';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -2474,10 +2474,14 @@ export async function main(ns) {
       const pixelX = screenX * charWidth;
       const wallCenterY = (Math.floor((H - h) / 2) + h / 2) * charHeight;
       const deathFallOffset = fallT && !ground ? fallT * fall * imgH : 0;   // only flyers sink; grounded corpses stay on the floor
+      // Where a wall at this distance starts and ends on screen: the same formula the walls and the floor use (wall height
+      // H / (0.82 * perp) rows, continuous, no rounding), so a grounded thing's feet sit exactly on the floor at every distance.
+      // (Using the sprite's own rounded height made feet jump between floating and standing as the distance changed.)
+      const halfWall = H / (1.64 * perp);
       // Ceiling hangers: top edge at the top of the wall (kept on screen when you stand right under it)
-      const wallTopY = Math.max(0, Math.floor((H - h) / 2) * charHeight);
-      // Grounded decorations: bottom edge on the floor line (the bottom of the wall at that distance, kept on screen)
-      const wallBottomY = Math.min(H * charHeight, (Math.floor((H - h) / 2) + h) * charHeight);
+      const wallTopY = Math.max(0, (H / 2 - halfWall) * charHeight);
+      // Grounded enemies and decorations: bottom edge on the floor line (the bottom of the wall at that distance, kept on screen)
+      const wallBottomY = Math.min(H * charHeight, (H / 2 + halfWall) * charHeight);
       const pixelY = hang ? wallTopY : ground ? wallBottomY - imgH : wallCenterY - imgH / 2 + deathFallOffset;
 
       // Clone the already-decoded image instead of re-encoding it through a canvas every frame
