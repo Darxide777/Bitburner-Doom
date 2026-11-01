@@ -227,6 +227,8 @@ const DEFAULT_DIFFICULTY = 'normal';
 //   painTicks                      how long an enemy flinches (no moving or attacking) after a pain roll
 //   hazard                         damage taken every `interval` ticks while standing in nukage
 //   powerTicks                     duration of each timed power-up (see POWERUPS in PICKUPS)
+//   itemGrowth                     how many times bigger than its picture a non-enemy sprite (terminal, torch, pickup, fireball, explosion) gets as you come close
+//   useRange                       how far ahead (tiles) F can open a door or push a secret wall (it also tries a little to each side)
 //   terminalUrl / terminalRange    the page a TERMINAL decoration opens (see DECORATIONS `use`) and how close (tiles) you must stand
 //   spawnWarningTicks              how long the fire-spike warning shows before a spawner's (Pain Elemental, Arch-vile) enemy appears
 //   freezeGraceTicks               after a freeze (PROJECTILES `freeze`) wears off you cannot be frozen again for this long
@@ -242,6 +244,8 @@ const TUNING = {
   powerTicks: { invuln: 750, radsuit: 1500, berserk: 1500 },
   freezeGraceTicks: 50,
   spawnWarningTicks: 14,   // about half a second
+  itemGrowth: 4,   // decorations, pickups, projectiles and effects grow as you approach, up to this many times their picture size
+  useRange: 2.0,   // how far ahead (tiles) F can reach a door or secret wall
   terminalUrl: 'https://bitburner-official.github.io/',   // web version of Bitburner, opened by the terminal in the level
   terminalRange: 1.8,
   berserkMultiplier: 2,
@@ -647,8 +651,8 @@ const ENEMIES = {
     blob: { tag: '\x16', chars: '@#*:', size: 1.6 },
     sounds: { hurt: 'spidermastermindinjured', death: 'spidermasterminddeath' },
     attacks: [
-      // rapid bursts of bullets: several pellets, fired often
-      { kind: 'ranged', projectile: 'pellet', count: 4, spread: 0.3, damage: 2, range: [2, 25], chance: 0.08, sound: 'spidermastermindattack', volume: 1.0 },
+      // chaingun: a stream of single bullets (about 7 a second), each a little off target; the sound is the pistol clip played at that rate
+      { kind: 'ranged', projectile: 'pellet', count: 1, spread: 0.1, damage: 2, range: [2, 25], chance: 0.3, sound: 'spidermastermindattack', volume: 0.7 },
     ],
   },
   // ── The zombie tanks (the Zombie Tank Pack mod; front-facing art only). The machine-gun tank replaced the Chaingunner and
@@ -853,7 +857,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '58';
+  const VERSION = '61';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1902,7 +1906,7 @@ export async function main(ns) {
 
   // ─── USE / INTERACT ─────────────────────────────────────────────────────────
   // The F key (edge-triggered with a 12-tick cooldown in updateGame). First checks for a usable decoration in front of you
-  // (usableDecorAhead: the terminal opens the Bitburner overlay); otherwise probes the single tile 1.3 tiles straight ahead.
+  // (usableDecorAhead: the terminal opens the Bitburner overlay); otherwise looks for a door or secret wall up to TUNING.useRange tiles ahead (usableTileAhead).
   // SECRET: becomes passable for good (blocked = 0) and counts as found. DOOR: needs the matching key in heldKeys if
   // doorKey says so; toggles the door's TARGET state (doorOpen); updateDoors() then animates it and updates `blocked`. Refuses to close on the player or a living
   // enemy. EXIT tiles are not "used": updateGame() ends the level when the player stands on one.
@@ -1917,10 +1921,27 @@ export async function main(ns) {
     }
     return best;
   }
+  // The door or secret wall you are trying to use: walks along where you look in small steps (from 0.3 tiles out to
+  // TUNING.useRange), then tries two slightly different directions (about 11 degrees either side) so you do not have to aim
+  // exactly. Stops at the first solid wall, so you cannot reach through one. Returns { fx, fy } or null. (The old rule probed
+  // ONE point 1.3 tiles ahead, which missed a door when you stood close to it, because the point landed past the door.)
+  function usableTileAhead() {
+    for (const turn of [0, 0.2, -0.2]) {
+      const c = Math.cos(pa + turn), s = Math.sin(pa + turn);
+      for (let d = 0.3; d <= TUNING.useRange; d += 0.1) {
+        const fx = px + c * d, fy = py + s * d, kind = tileAt(fx, fy);
+        if (kind === TILE.DOOR || kind === TILE.SECRET) return { fx, fy };
+        if (solidAt(fx, fy)) break;
+      }
+    }
+    return null;
+  }
   function tryUse() {
     const dec = usableDecorAhead();
     if (dec) { if (DECORATIONS[dec.type].use === 'terminal') openTerminal(); return; }
-    const fx = px + Math.cos(pa) * 1.3, fy = py + Math.sin(pa) * 1.3;
+    const target = usableTileAhead();
+    if (!target) return;
+    const { fx, fy } = target;
     const mx = Math.floor(fx), my = Math.floor(fy);
     const idx = my * MW + mx;
     const kind = tileAt(fx, fy);
@@ -2412,7 +2433,7 @@ export async function main(ns) {
     }
     for (const p of pickups) {
       const def = PICKUPS[p.type];
-      if (p.alive && def) addSprite(p.x, p.y, { type: def.sprite ?? p.type.toUpperCase(), anim: 'idle', step: 0, scale: 1, glyph: def.glyph });
+      if (p.alive && def) addSprite(p.x, p.y, { type: def.sprite ?? p.type.toUpperCase(), anim: 'idle', step: 0, scale: 1, glyph: def.glyph, ground: true });   // pickups lie on the floor
     }
     for (const d of decor) {
       const def = DECORATIONS[d.type];
@@ -2464,10 +2485,12 @@ export async function main(ns) {
       const img = frames[step != null ? Math.min(step, frames.length - 1) : Math.floor((now + (offset || 0)) / ms) % frames.length];
       if (!img) continue;
 
-      // Scale sprite based on distance (closer = larger). Other things: full picture size within 5 * their scale tiles.
-      // Enemies: full size (times zoom) within render.near tiles, then shrinking as 1/distance like the walls (the old
-      // rule kept big enemies at a constant size at every distance, so they looked smaller as you got closer).
-      const scale = Math.max(0.1, Math.min(1.0, (near || baseScale * 5.0) / perp)) * (zoom || 1);
+      // Scale sprite based on distance (closer = larger), always in proportion to 1/distance like the walls, so nothing
+      // looks smaller as you walk up to it (the old rule held things at their picture size within a few tiles).
+      // Enemies: full size (times zoom) within render.near tiles. Everything else (decorations, pickups, projectiles,
+      // effects): picture size at 5 * scale tiles (unchanged from before), growing as you come closer, up to
+      // TUNING.itemGrowth times the picture size.
+      const scale = Math.max(0.1, Math.min(near ? 1 : TUNING.itemGrowth, (near || baseScale * 5.0) / perp)) * (zoom || 1);
       const imgW = img.width * scale;
       const imgH = img.height * scale;
 

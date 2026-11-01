@@ -104,7 +104,7 @@ ignored.
 | `B` | Baron of Hell | tough, green fireballs and a claw |
 | `m` | Cryobus | slow ice Mancubus: two fireballs per attack, one out of each arm; a hit freezes you in place for 3 seconds (you can still turn and shoot) |
 | `Y` | Cyberdemon | boss, rockets |
-| `M` | Spider Mastermind | boss, rapid bursts of bullets |
+| `M` | Spider Mastermind | boss, chaingun (a stream of single bullets) |
 | `L` | Pain Elemental | spawner: summons Lost Souls (a fire spike warns where each one will appear) |
 | `V` | Arch-vile | spawner: summons a random enemy from anywhere in the game (same fire-spike warning) |
 
