@@ -82,7 +82,7 @@
 //   One level-start path     startLevel() is used for the first level, next level, retry and play-again, so there
 //                            is exactly one place that has to know every piece of per-level state. When you add
 //                            new per-level state, reset it THERE.
-//   Floor and sky pictures   Optional (see FLATS): Sky_idle1 / Floor_idle1 in sprites.json are painted on a canvas UNDER
+//   Floor and sky pictures   Optional (see FLATS): Floor_idle1 / Ceiling_idle1 / Sky_idle1 in sprites.json are painted on a canvas UNDER
 //                            the text; the ASCII floor is the fallback.
 //   DDA raycasting           castRay() jumps from grid line to grid line: exact, cheap, and reports which wall
 //                            face was hit (used for shading). Wall HEIGHT uses perpendicular distance (no
@@ -862,7 +862,7 @@ export async function main(ns) {
   // edit survives only if run with --noupdate (AUTO_UPDATE false) or this VERSION is not lower than the repo's. Bump VERSION on every
   // release or nobody receives it. Any failure (network, bad JSON, timeout) is non-fatal: the current version runs, and the reason is printed to the terminal.
   // Timeouts: 8 s for the version check (doom.js), 180 s for each data file (audio.json is about 24 MB; a short limit made updates fail silently).
-  const VERSION = '46';
+  const VERSION = '47';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1627,7 +1627,7 @@ export async function main(ns) {
       return m[a.length][b.length];
     };
     const known = new Set([...Object.keys(ENEMIES), ...Object.keys(DECORATIONS), ...Object.entries(PICKUPS).map(([id, p]) => p.sprite ?? id.toUpperCase()),
-      ...Object.values(PROJECTILES).map(p => p.sprite).filter(Boolean), 'SKY', 'FLOOR']);
+      ...Object.values(PROJECTILES).map(p => p.sprite).filter(Boolean), 'SKY', 'FLOOR', 'CEILING']);
     const want = norm(expected);
     let best = '', bestD = Math.max(2, Math.ceil(want.length * 0.15)) + 1;
     for (const k of Object.keys(SPRITES || {})) {
@@ -2202,24 +2202,25 @@ export async function main(ns) {
   }
   // ─── FLATS (sky ceiling + textured floor) ───────────────────────────────────
   // Optional pictures for the ceiling and floor, from two entries in sprites.json:
-  //   Sky_idle1    wide panorama (wraps all the way round, so it must tile sideways). Drawn on the ceiling and scrolls
-  //                as you turn, like a skybox. It does not move when you walk (the sky is far away).
-  //   Floor_idle1  tileable square picture, one copy per map tile. Drawn with real perspective, so it slides past
-  //                as you walk, and it fades into darkness with distance. Shrunk to FLOOR_TEX x FLOOR_TEX when loaded.
-  // Either one may be missing (that half is drawn dark); with neither, or with TUNING.floorAndCeiling false, the old
-  // ASCII floor is used. Nukage tiles are painted as a flickering green on the same layer.
+  //   Floor_idle1    tileable square picture, one copy per map tile. Drawn with real perspective, so it slides past
+  //                  as you walk, and it fades into darkness with distance. Shrunk to FLAT_TEX x FLAT_TEX when loaded.
+  //   Ceiling_idle1  the same for the ceiling (indoor levels). Takes priority over the sky.
+  //   Sky_idle1      wide panorama (wraps all the way round, so it must tile sideways), used on the ceiling when there is
+  //                  no Ceiling_idle1 (outdoor look). Scrolls as you turn, does not move when you walk.
+  // Any of them may be missing (a missing ceiling/floor is drawn dark); with none, or with TUNING.floorAndCeiling false,
+  // the old ASCII floor is used. Nukage tiles are painted as a flickering green on the same layer.
   // How: a canvas of FLAT_W x FLAT_H pixels (FLAT_SX x FLAT_SY pixels per text cell) sits UNDER the text. paintFlats()
   // fills it each frame: wall rows black (so the text walls stay solid), ceiling rows from the sky, floor rows from the
   // texture (world point = the same maths as floorCell). The ASCII layer leaves those cells blank.
-  const FLAT_SX = 4, FLAT_SY = 8, FLAT_W = W * FLAT_SX, FLAT_H = H * FLAT_SY, FLOOR_TEX = 64;
-  let flatCtx = null, flatImage = null, skyPix = null, skyW = 0, skyH = 0, floorPix = null;
+  const FLAT_SX = 4, FLAT_SY = 8, FLAT_W = W * FLAT_SX, FLAT_H = H * FLAT_SY, FLAT_TEX = 64;
+  let flatCtx = null, flatImage = null, skyPix = null, skyW = 0, skyH = 0, floorPix = null, ceilPix = null;
   const flatCos = new Float32Array(FLAT_W), flatSin = new Float32Array(FLAT_W), flatInv = new Float32Array(FLAT_W), skyCol = new Int32Array(FLAT_W);
   const flatPerp = new Float32Array(FLAT_H), flatShade = new Float32Array(FLAT_H), skyRow = new Int32Array(FLAT_H);
   for (let r = 0; r < FLAT_H; r++) {
     const yc = (r + 0.5) * H / FLAT_H;
     skyRow[r] = r;   // set properly in buildFlats (needs the sky height)
-    if (yc > H / 2) {
-      flatPerp[r] = H / (0.82 * (2 * yc - H));    // same formula as FLOOR_PERP, at pixel precision
+    if (yc !== H / 2) {
+      flatPerp[r] = H / (0.82 * (2 * (yc > H / 2 ? yc : H - yc) - H));    // same formula as FLOOR_PERP, at pixel precision (ceiling mirrors the floor)
       flatShade[r] = 1.25 / (1 + flatPerp[r] * 0.25);
     }
   }
@@ -2234,8 +2235,8 @@ export async function main(ns) {
   // Called once after preloadSprites(). Needs canvas support; any failure just leaves the ASCII floor in use.
   function buildFlats() {
     try {
-      const sky = framesFor('SKY', 'idle')?.[0], floor = framesFor('FLOOR', 'idle')?.[0];
-      if (!sky && !floor) return;
+      const sky = framesFor('SKY', 'idle')?.[0], floor = framesFor('FLOOR', 'idle')?.[0], ceil = framesFor('CEILING', 'idle')?.[0];
+      if (!sky && !floor && !ceil) return;
       flatCtx = flatCanvas.getContext('2d');
       flatCanvas.width = FLAT_W; flatCanvas.height = FLAT_H;
       flatImage = flatCtx.createImageData(FLAT_W, FLAT_H);
@@ -2243,7 +2244,8 @@ export async function main(ns) {
         skyW = sky.width; skyH = sky.height; skyPix = pixelsOf(sky, skyW, skyH);
         for (let r = 0; r < FLAT_H / 2; r++) skyRow[r] = Math.min(skyH - 1, Math.floor(r / (FLAT_H / 2) * skyH * 0.8));   // the top 80% of the picture fills the ceiling
       }
-      if (floor) floorPix = pixelsOf(floor, FLOOR_TEX, FLOOR_TEX);
+      if (floor) floorPix = pixelsOf(floor, FLAT_TEX, FLAT_TEX);
+      if (ceil) ceilPix = pixelsOf(ceil, FLAT_TEX, FLAT_TEX);
     } catch (e) {
       flatCtx = null;
       ns.tprint(`WARNING: textured floor/sky disabled: ${e}`);
@@ -2252,7 +2254,7 @@ export async function main(ns) {
   // Paints the floor/sky layer for the current view. Returns false when there is no layer (the caller then draws ASCII).
   function paintFlats() {
     if (!flatCtx) return false;
-    const d = flatImage.data, hazardPhase = (Date.now() >> 8) & 1, FW = FLAT_W, HALF = FLAT_H / 2, MASK = FLOOR_TEX - 1;
+    const d = flatImage.data, hazardPhase = (Date.now() >> 8) & 1, FW = FLAT_W, HALF = FLAT_H / 2, MASK = FLAT_TEX - 1;
     for (let c = 0; c < FW; c++) {
       const cx = (c + 0.5) / FW * W;
       const ang = pa + (cx / W - 0.5) * FOV;
@@ -2265,19 +2267,26 @@ export async function main(ns) {
         const o = (r * FW + c) * 4;
         let R = 0, G = 0, B = 0;
         if (r >= top && r < bottom) { /* wall: black */ }
-        else if (r < HALF) {
+        else if (r < HALF && ceilPix) {
+          const perp = flatPerp[r];
+          if (perp < VIEW_DIST) {
+            const t = perp * flatInv[c], sh = Math.min(1, flatShade[r]);
+            const i = ((Math.floor((py + flatSin[c] * t) * FLAT_TEX) & MASK) * FLAT_TEX + (Math.floor((px + flatCos[c] * t) * FLAT_TEX) & MASK)) * 4;
+            R = ceilPix[i] * sh; G = ceilPix[i + 1] * sh; B = ceilPix[i + 2] * sh;
+          }
+        } else if (r < HALF) {
           if (skyPix) { const i = (skyRow[r] * skyW + skyCol[c]) * 4; R = skyPix[i]; G = skyPix[i + 1]; B = skyPix[i + 2]; }
           else { R = 18; G = 14; B = 22; }
         } else {
           const perp = flatPerp[r];
           if (perp < VIEW_DIST) {
             const t = perp * flatInv[c], fx = px + flatCos[c] * t, fy = py + flatSin[c] * t, sh = Math.min(1, flatShade[r]);
-            const tx = Math.floor(fx * FLOOR_TEX) & MASK, ty = Math.floor(fy * FLOOR_TEX) & MASK;
+            const tx = Math.floor(fx * FLAT_TEX) & MASK, ty = Math.floor(fy * FLAT_TEX) & MASK;
             if (tileAt(fx, fy) === TILE.HAZARD) {   // nukage: flickering green blocks
               const k = (((tx >> 3) ^ (ty >> 3) ^ hazardPhase) & 1) ? 150 : 100;
               G = k * sh; B = 25 * sh;
             } else if (floorPix) {
-              const i = (ty * FLOOR_TEX + tx) * 4;
+              const i = (ty * FLAT_TEX + tx) * 4;
               R = floorPix[i] * sh; G = floorPix[i + 1] * sh; B = floorPix[i + 2] * sh;
             } else { const k = (((tx >> 5) + (ty >> 5)) & 1) ? 45 : 30; R = G = B = k * sh; }
           }

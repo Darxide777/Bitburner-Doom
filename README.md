@@ -211,13 +211,14 @@ The exploding barrel uses `Barrel_idle1`... (looped while it stands) and `Barrel
 The naming rule in one line: `{Type}_{walk|attack|death}{frame}`, plus one `{Type}_projectile` and one
 `{Type}_projectile_impact` for enemies that shoot (`Imp_walk1`, `Lost_Soul_death3`, `Cacodemon_projectile_impact`).
 
-## Floor and sky
+## Floor, ceiling and sky
 
-The game can draw a picture sky on the ceiling and a textured floor instead of ASCII characters. They are two entries in
-`sprites.json`: `Sky_idle1` (a wide panorama that tiles sideways; it scrolls as you turn) and `Floor_idle1` (a square
-tileable texture, one copy per map tile, drawn with perspective so it slides past as you walk and fades to dark with
-distance). Replace either by swapping that entry (`python sprites_tool.py add` refuses duplicates, so delete the old key
-first). Leave one out and that half is drawn dark; leave both out and you get the old ASCII floor. Nukage tiles are
+The game can draw a textured floor and ceiling (or a picture sky) instead of ASCII characters. They are entries in
+`sprites.json`: `Floor_idle1` and `Ceiling_idle1` (square tileable textures, one copy per map tile, drawn with
+perspective so they slide past as you walk and fade to dark with distance) and `Sky_idle1` (a wide panorama that tiles
+sideways and scrolls as you turn; used on the ceiling only when there is no `Ceiling_idle1`, e.g. for an outdoor look).
+Replace one by swapping that entry (`python sprites_tool.py add` refuses duplicates, so delete the old key first).
+Leave one out and that half is drawn dark; leave them all out and you get the old ASCII floor. Nukage tiles are
 painted as flickering green. `floorAndCeiling: false` in `TUNING` turns all of this off (faster).
 
 ## Sounds

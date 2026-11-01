@@ -1,7 +1,7 @@
 # sprites.json Reference
 
 **Last updated:** 2026-11-01
-**Total sprites:** 341 images in the file + 2 aliases
+**Total sprites:** 342 images in the file + 2 aliases
 **File:** `C:\Users\carly\Documents\Bitburner-Doom\sprites.json` (about 970 KB, **do not read it**: this file and `sprites_tool.py` replace reading it)
 
 This is a helper for AI agents. It lists every sprite name the game knows and explains the file format and naming
@@ -142,11 +142,12 @@ impacts are spawned by the game when a shot hits a wall or the player; bullets h
 
 | Picture | Sprite name | Status |
 |---|---|---|
-| Sky (ceiling) | `Sky_idle1` | done: 1024x256 panorama (Freedoom SKY3), wraps round as you turn, so it must tile sideways |
+| Ceiling | `Ceiling_idle1` | done: 64x64 tileable texture (Freedoom CEIL3_5), drawn with perspective like the floor; used instead of the sky |
+| Sky (ceiling) | `Sky_idle1` | done but unused while `Ceiling_idle1` exists (outdoor levels): 1024x256 panorama (Freedoom SKY3), wraps round as you turn, so it must tile sideways |
 | Floor | `Floor_idle1` | done: 64x64 tileable texture (Freedoom FLOOR4_8), one copy per map tile, fades to dark with distance |
 
-Either can be left out (that half is drawn dark); with neither, the ASCII floor is used. Any size works for the sky;
-the floor is shrunk to 64x64 on load, so supply a square tileable picture. Nukage tiles are painted green by the game.
+Any can be left out (a missing floor/ceiling is drawn dark); with none, the ASCII floor is used. The ceiling picture wins over the sky. Any size works for the sky;
+the floor and ceiling are shrunk to 64x64 on load, so supply square tileable pictures. Nukage tiles are painted green by the game.
 
 ### Still to add
 
@@ -822,4 +823,10 @@ type also needs its entry in `ENEMIES` in `doom.js`, and one with a projectile n
 | Key | Animation | Frame | Size (px) / note |
 |---|---|---|---|
 | `Floor_idle1` | idle | 1 | 64x64 |
+
+### CEILING  (1 sprites)
+
+| Key | Animation | Frame | Size (px) / note |
+|---|---|---|---|
+| `Ceiling_idle1` | idle | 1 | 64x64 |
 <!-- SPRITES:END -->
