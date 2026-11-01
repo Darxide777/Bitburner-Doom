@@ -860,8 +860,9 @@ export async function main(ns) {
   // cannot leave a new script with old assets), then ns.exec('doom.js', 'home', 1, ...ns.args) and return from this run.
   // Consequences: the script must be named doom.js on 'home'; the repo's data files REPLACE the local ones; a local
   // edit survives only if run with --noupdate (AUTO_UPDATE false) or this VERSION is not lower than the repo's. Bump VERSION on every
-  // release or nobody receives it. Any failure (network, bad JSON, timeout after 5 s) is non-fatal: the current version runs.
-  const VERSION = '45';
+  // release or nobody receives it. Any failure (network, bad JSON, timeout) is non-fatal: the current version runs, and the reason is printed to the terminal.
+  // Timeouts: 8 s for the version check (doom.js), 180 s for each data file (audio.json is about 24 MB; a short limit made updates fail silently).
+  const VERSION = '46';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -869,9 +870,9 @@ export async function main(ns) {
 
   if (AUTO_UPDATE) {
     try {
-      const fetchText = async file => {
+      const fetchText = async (file, timeoutMs = 180000) => {
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 5000);
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
         try {
           const res = await fetch(`${RAW_BASE}/${file}`, { signal: ctrl.signal });
           if (!res.ok) throw new Error(`${file}: HTTP ${res.status}`);
@@ -881,12 +882,12 @@ export async function main(ns) {
         }
       };
 
-      const remote = await fetchText('doom.js');
+      const remote = await fetchText('doom.js', 8000);
       const match = remote.match(/const VERSION = '([^']+)'/);
       const remoteVersion = match ? match[1] : null;
 
       if (remoteVersion && compareVersions(VERSION, remoteVersion) < 0) {
-        ns.tprint(`UPDATE: New version ${remoteVersion} available. Updating...`);
+        ns.tprint(`UPDATE: New version ${remoteVersion} available. Downloading (the sound file is large, this can take a while)...`);
 
         // Download and validate everything first, so a failed download can't leave a half-updated install.
         const assets = {};
@@ -907,7 +908,7 @@ export async function main(ns) {
         return;
       }
     } catch (e) {
-      ns.print(`Auto-update skipped: ${e}`); // not fatal: run the current version
+      ns.tprint(`Auto-update failed (${e}); running the installed version. Re-run install.js to update by hand.`); // not fatal: run the current version
     }
   }
 
