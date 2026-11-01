@@ -5,7 +5,8 @@ export async function main(ns) {
   const BRANCH = 'main';
   const RAW_BASE = `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/${BRANCH}`;
 
-  // doom.js first, then the data it reads. Extra level maps are downloaded by the game itself on its first run.
+  // doom.js first, then the data it reads. Extra level maps (any `map: 'file.txt'` in doom.js's LEVELS) are added below.
+  // Run this again whenever the game prints "New version available": it replaces every file listed here.
   const FILES = [
     ['doom.js', ''],
     ['map.txt', ''],
@@ -28,6 +29,13 @@ export async function main(ns) {
       ns.tprint(`ERROR: could not download ${file}. Installation stopped; run install.js again to retry.`);
       return;
     }
+  }
+
+  // Extra level maps named in the freshly downloaded doom.js (optional: a missing one is skipped, not fatal)
+  for (const m of ns.read('doom.js').matchAll(/\bmap: '([^']+)'/g)) {
+    if (!/\.txt$/.test(m[1]) || FILES.some(f => f[0] === m[1])) continue;
+    ns.tprint(`Downloading ${m[1]}...`);
+    try { if (!(await ns.wget(`${RAW_BASE}/${m[1]}`, m[1]))) ns.tprint(`Skipped ${m[1]} (could not download)`); } catch (e) { ns.tprint(`Skipped ${m[1]}: ${e}`); }
   }
 
   const version = (ns.read('doom.js').match(/const VERSION = '([^']+)'/) || [])[1];

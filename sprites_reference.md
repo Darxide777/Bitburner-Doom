@@ -1,7 +1,7 @@
 # sprites.json Reference
 
 **Last updated:** 2026-11-01
-**Total sprites:** 342 images in the file + 2 aliases
+**Total sprites:** 344 images in the file + 2 aliases
 **File:** `C:\Users\carly\Documents\Bitburner-Doom\sprites.json` (about 970 KB, **do not read it**: this file and `sprites_tool.py` replace reading it)
 
 This is a helper for AI agents. It lists every sprite name the game knows and explains the file format and naming
@@ -138,16 +138,18 @@ impacts are spawned by the game when a shot hits a wall or the player; bullets h
 | HANGINGBODY2 | `J` | `Hanging_Body_2_idle1` | done, 1 frame |
 | HANGINGBODY3 | `N` | `Hanging_Body_3_idle1` | done, 1 frame |
 
-### Floor and sky (`FLATS` in `doom.js`)
+### Walls, floor and sky (`FLATS` in `doom.js`)
 
 | Picture | Sprite name | Status |
 |---|---|---|
+| Walls | `Wall_idle1` | done: 128x128 tileable texture (Freedoom STARTAN1), used by every wall style; `Wall_Stone_idle1` / `Wall_Brick_idle1` / `Wall_Tech_idle1` override it per style |
+| Doors | `Door_idle1` | done: 128x128 (Freedoom BIGDOOR2); rises as the door opens; key doors are tinted with their key colour |
 | Ceiling | `Ceiling_idle1` | done: 64x64 tileable texture (Freedoom CEIL3_5), drawn with perspective like the floor; used instead of the sky |
 | Sky (ceiling) | `Sky_idle1` | done but unused while `Ceiling_idle1` exists (outdoor levels): 1024x256 panorama (Freedoom SKY3), wraps round as you turn, so it must tile sideways |
 | Floor | `Floor_idle1` | done: 64x64 tileable texture (Freedoom FLOOR4_8), one copy per map tile, fades to dark with distance |
 
-Any can be left out (a missing floor/ceiling is drawn dark); with none, the ASCII floor is used. The ceiling picture wins over the sky. Any size works for the sky;
-the floor and ceiling are shrunk to 64x64 on load, so supply square tileable pictures. Nukage tiles are painted green by the game.
+Any can be left out (a missing floor/ceiling is drawn dark, missing walls stay ASCII); with none, the ASCII look is used. The ceiling picture wins over the sky. Any size works for the sky;
+floor and ceiling are shrunk to 64x64 and walls/doors to 128x128 on load, so supply square tileable pictures. Nukage tiles are painted green by the game.
 
 ### Still to add
 
@@ -829,4 +831,16 @@ type also needs its entry in `ENEMIES` in `doom.js`, and one with a projectile n
 | Key | Animation | Frame | Size (px) / note |
 |---|---|---|---|
 | `Ceiling_idle1` | idle | 1 | 64x64 |
+
+### WALL  (1 sprites)
+
+| Key | Animation | Frame | Size (px) / note |
+|---|---|---|---|
+| `Wall_idle1` | idle | 1 | 128x128 |
+
+### DOOR  (1 sprites)
+
+| Key | Animation | Frame | Size (px) / note |
+|---|---|---|---|
+| `Door_idle1` | idle | 1 | 128x128 |
 <!-- SPRITES:END -->

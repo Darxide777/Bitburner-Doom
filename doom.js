@@ -20,7 +20,7 @@
 //                 more map files listed in LEVELS.
 //   audio.json    { "soundname": "<base64 wav>", ... }  every key is decoded at startup.
 //   sprites.json  { "Zombie_walk1": "<base64 png>", ... }  key format is explained at parseSpriteKey().
-//   The data files are read with ns.read() and are also what auto-update downloads and overwrites.
+//   The data files are read with ns.read(). install.js downloads them from the GitHub repo (there is no auto-update).
 //
 // LAYOUT OF THIS FILE
 //   1. Module-level GAME DATA tables (ASSETS, LEVELS, tuning, tiles, KEYS, WEAPONS, PICKUPS, DECORATIONS, PROJECTILES, ENEMIES)
@@ -34,7 +34,7 @@
 //   Module load   GAME DATA tables -> derived tables (KEYS adds door tiles + keycard pickups; WEAPONS gets
 //                 defaults, weapon pickups and WEAPON_KEYS; ENEMIES gets defaults) -> CHAR_INFO.
 //                 CHAR_INFO is built LAST because it reads what the earlier steps filled in.
-//   main(ns)      cheat toggles -> auto-update (may restart the script and return) -> declare map state -> read
+//   main(ns)      cheat toggles -> version check (prints a message if the repo has a newer VERSION) -> declare map state -> read
 //                 sprites.json as text (images are decoded later) -> declare game state -> build DOM -> install
 //                 input handlers -> read audio.json -> TITLE LOOP (difficulty choice, waits for Enter/Space) ->
 //                 preloadSprites() -> loadAllSounds() -> checkGameData() -> start music ->
@@ -124,18 +124,14 @@
 //   Per-level state        reset it in startLevel().
 //   Screen size            W, H and the font. The render box is measured automatically; the 660x368 values in the
 //                          DOM setup are only the fallback used when measuring is impossible.
-//   Releasing a change     bump the VERSION constant (see AUTO UPDATE for how that is read and why it matters).
+//   Releasing a change     bump the VERSION constant (see VERSION CHECK: players are told to run install.js when it is higher).
 //
 // KNOWN PITFALLS (details are next to the code they affect)
-//   * Auto-update overwrites doom.js AND map.txt, audio.json, sprites.json and every level map named in the
-//     repo's LEVELS with the repo's copies whenever the repo's VERSION is higher. Local edits to those files
-//     are lost on that run. Run with --noupdate to develop.
-//   * Auto-update finds the level maps by running a regex over the repo's doom.js looking for the property name
-//     map followed by a colon and a single-quoted file name. Write level maps in that form, and do not use that
-//     form for anything else.
+//   * install.js finds the level maps by running a regex over doom.js looking for the property name map followed by a
+//     colon and a single-quoted file name. Write level maps in that form, and do not use that form for anything else.
 //   * The remote VERSION is located with a regex on the declaration line of the VERSION constant (const, name,
 //     equals sign, single-quoted string). Keep that declaration form, and never write a line of the same shape
-//     earlier in the file, comments included, or auto-update will read the wrong number.
+//     earlier in the file, comments included, or the version check will read the wrong number.
 //   * Colour tags in grid cells are control characters; each must be unique (see CELL_COLORS) and every glyph a
 //     cell can hold must be a single UTF-16 unit (no emoji), because cells are split with slice(1).
 //   * Function declarations inside main are hoisted but the const arrows and tables (angleDiff, canFire,
@@ -161,8 +157,8 @@
 //  pickupChar / doorChar must be unique across all tables (the game warns at startup about duplicates).
 // ════════════════════════════════════════════════════════════════════════════
 
-// Where the data files live (paths inside the game's home folder, and inside the repo for auto-update)
-// These names are used in three places: ns.read() at startup, the list auto-update downloads, and the
+// Where the data files live (paths inside the game's home folder, and inside the repo for install.js)
+// These names are used in three places: ns.read() at startup, the list install.js downloads, and the
 // messages checkGameData() prints. They live on the same server as doom.js ('home').
 const ASSETS = { map: 'map.txt', audio: 'audio.json', sprites: 'sprites.json' };
 
@@ -181,7 +177,7 @@ const SPRITE_ALIASES = {
 // Each map is a text file in the same folder as doom.js. Health, armor, ammo, weapons and score carry over to
 // the next level; keys, power-ups, kills and secrets do not. Dying restarts the level with what you had when
 // it began. To add a level, copy the line and name your file.
-// (Auto-update looks for the property name `map` + a colon + a quoted file name in this repo's doom.js to know
+// (install.js looks for the property name `map` + a colon + a quoted file name in this repo's doom.js to know
 // which map files to download, so keep that spelling.)
 const LEVELS = [
   { name: 'E1M1: HANGAR', map: ASSETS.map, par: 180 },
@@ -803,7 +799,7 @@ const { info: CHAR_INFO, conflicts: CHAR_CONFLICTS } = (() => {
 
 // main() runs the whole game: setup, title screen, asset loading, then the game loop (see EXECUTION ORDER at the top).
 // Everything below is a closure over main's locals. Sections are marked with ─── headers in this order:
-// AUTO UPDATE, MAP (parseMap), SPRITES, MAP QUERIES, CONSTANTS, GAME STATE, DOM SETUP, INPUT, HUD, PICKUPS, DAMAGE, AUDIO,
+// VERSION CHECK, MAP (parseMap), SPRITES, MAP QUERIES, CONSTANTS, GAME STATE, DOM SETUP, INPUT, HUD, PICKUPS, DAMAGE, AUDIO,
 // RAYCASTING, USE, WEAPONS, SHOOT, RENDER, TITLE/END SCREENS, TITLE LOOP, MAIN GAME LOOP (movement, enemy AI,
 // updateGame, doors, LEVEL LIFECYCLE, frame loop).
 /** @param {NS} ns */
@@ -826,21 +822,19 @@ export async function main(ns) {
   }
 
   // ─── LAUNCH FLAGS ──────────────────────────────────────────────────────────
-  // Cheats and the auto-updater are switched with flags when you start the script, e.g.
-  //   run doom.js --godmode --noupdate
-  //   --noupdate      skip the auto-update check (use this while editing the script, or you may lose your edits)
+  // Cheats are switched with flags when you start the script, e.g.
+  //   run doom.js --godmode --allweapons
   //   --godmode       you never take damage
   //   --infiniteammo  weapons never run out of ammo
   //   --allweapons    start with every weapon and full ammo
   //   --noautoswitch  don't switch weapon automatically when the current one runs dry
   //   --help          print this list and quit
   // Flags are read by ns.flags (the only way settings enter the game). A flag that isn't in FLAG_SCHEMA is reported and
-  // ignored. If ns.flags is missing (some web-page converters) every flag is simply off. The auto-updater restarts the
-  // script with the same arguments, so flags survive an update.
-  const FLAG_SCHEMA = [['help', false], ['noupdate', false], ['godmode', false], ['infiniteammo', false], ['allweapons', false], ['noautoswitch', false]];
+  // ignored. If ns.flags is missing (some web-page converters) every flag is simply off.
+  const FLAG_SCHEMA = [['help', false], ['godmode', false], ['infiniteammo', false], ['allweapons', false], ['noautoswitch', false]];
   const flags = typeof ns.flags === 'function' ? ns.flags(FLAG_SCHEMA) : Object.fromEntries(FLAG_SCHEMA);
   if (flags.help) {
-    ns.tprint('doom.js flags:  --noupdate (skip auto-update)  --godmode (no damage)  --infiniteammo  --allweapons (every weapon, full ammo)  --noautoswitch (no automatic weapon switch)  --help');
+    ns.tprint('doom.js flags:  --godmode (no damage)  --infiniteammo  --allweapons (every weapon, full ammo)  --noautoswitch (no automatic weapon switch)  --help');
     return;
   }
   const unknownFlags = Object.keys(flags).filter(k => k !== '_' && !FLAG_SCHEMA.some(f => f[0] === k)).map(k => `--${k}`).concat((flags._ || []).map(String));
@@ -849,68 +843,30 @@ export async function main(ns) {
   const INFINITE_AMMO = !!flags.infiniteammo;
   const ALL_WEAPONS = !!flags.allweapons;
   const AUTO_SWITCH_EMPTY = !flags.noautoswitch; // Switch to a weapon that has ammo when the current one runs dry
-  // NOTE: auto-update downloads and RUNS code from the repo below. Turn it off with --noupdate if you don't
-  // trust that repo, and always while testing local edits.
-  const AUTO_UPDATE = !flags.noupdate;
-
-  // ─── AUTO UPDATE ─────────────────────────────────────────────────────────
-  // HOW AUTO-UPDATE WORKS: fetch doom.js from the repo, read ITS version with a regex on the first
-  // VERSION declaration it finds, and if that is higher than this file's, download map.txt / audio.json /
-  // sprites.json too, validate the two JSON files, write the assets first and doom.js LAST (so a failed download
-  // cannot leave a new script with old assets), then ns.exec('doom.js', 'home', 1, ...ns.args) and return from this run.
-  // Consequences: the script must be named doom.js on 'home'; the repo's data files REPLACE the local ones; a local
-  // edit survives only if run with --noupdate (AUTO_UPDATE false) or this VERSION is not lower than the repo's. Bump VERSION on every
-  // release or nobody receives it. Any failure (network, bad JSON, timeout) is non-fatal: the current version runs, and the reason is printed to the terminal.
-  // Timeouts: 8 s for the version check (doom.js), 180 s for each data file (audio.json is about 24 MB; a short limit made updates fail silently).
-  const VERSION = '47';
+  // ─── VERSION CHECK ───────────────────────────────────────────────────────
+  // There is no auto-update. On start the script fetches doom.js from the GitHub repo, reads ITS version with a regex on
+  // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
+  // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
+  // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
+  const VERSION = '48';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
   const RAW_BASE = `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/${BRANCH}`;
 
-  if (AUTO_UPDATE) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
     try {
-      const fetchText = async (file, timeoutMs = 180000) => {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-        try {
-          const res = await fetch(`${RAW_BASE}/${file}`, { signal: ctrl.signal });
-          if (!res.ok) throw new Error(`${file}: HTTP ${res.status}`);
-          return await res.text();
-        } finally {
-          clearTimeout(timer);
-        }
-      };
-
-      const remote = await fetchText('doom.js', 8000);
-      const match = remote.match(/const VERSION = '([^']+)'/);
-      const remoteVersion = match ? match[1] : null;
-
-      if (remoteVersion && compareVersions(VERSION, remoteVersion) < 0) {
-        ns.tprint(`UPDATE: New version ${remoteVersion} available. Downloading (the sound file is large, this can take a while)...`);
-
-        // Download and validate everything first, so a failed download can't leave a half-updated install.
-        const assets = {};
-        for (const f of Object.values(ASSETS)) assets[f] = await fetchText(f);
-        // Extra level maps named in the repo's LEVELS. Optional: a missing one is skipped, not fatal.
-        for (const m of remote.matchAll(/\bmap: '([^']+)'/g)) {
-          if (m[1] in assets || !/\.txt$/.test(m[1])) continue;
-          try { assets[m[1]] = await fetchText(m[1]); } catch (e) { ns.print(`Update: skipped ${m[1]}: ${e}`); }
-        }
-        JSON.parse(assets[ASSETS.audio]);
-        JSON.parse(assets[ASSETS.sprites]);
-
-        for (const [name, text] of Object.entries(assets)) await ns.write(name, text, 'w');
-        await ns.write('doom.js', remote, 'w'); // script last, once its assets are in place
-
-        ns.tprint('Update complete. Restarting...');
-        ns.exec('doom.js', 'home', 1, ...ns.args);   // same flags as this run
-        return;
+      const res = await fetch(`${RAW_BASE}/doom.js`, { signal: ctrl.signal });
+      if (res.ok) {
+        const remoteVersion = (await res.text()).match(/const VERSION = '([^']+)'/)?.[1];
+        if (remoteVersion && compareVersions(VERSION, remoteVersion) < 0) ns.tprint('New version available, run install.js to update.');
       }
-    } catch (e) {
-      ns.tprint(`Auto-update failed (${e}); running the installed version. Re-run install.js to update by hand.`); // not fatal: run the current version
+    } finally {
+      clearTimeout(timer);
     }
-  }
+  } catch (e) { /* offline or blocked: not important */ }
 
   // ─── MAP ────────────────────────────────────────────────────────────────────
   // The map file is parsed ONCE into flat arrays (tile kinds, a solid mask, spawn lists). After this
@@ -1627,7 +1583,7 @@ export async function main(ns) {
       return m[a.length][b.length];
     };
     const known = new Set([...Object.keys(ENEMIES), ...Object.keys(DECORATIONS), ...Object.entries(PICKUPS).map(([id, p]) => p.sprite ?? id.toUpperCase()),
-      ...Object.values(PROJECTILES).map(p => p.sprite).filter(Boolean), 'SKY', 'FLOOR', 'CEILING']);
+      ...Object.values(PROJECTILES).map(p => p.sprite).filter(Boolean), 'SKY', 'FLOOR', 'CEILING', 'WALL', 'DOOR', ...WALL_STYLE_IDS.map(id => 'WALL' + id.toUpperCase())]);
     const want = norm(expected);
     let best = '', bestD = Math.max(2, Math.ceil(want.length * 0.15)) + 1;
     for (const k of Object.keys(SPRITES || {})) {
@@ -2207,13 +2163,22 @@ export async function main(ns) {
   //   Ceiling_idle1  the same for the ceiling (indoor levels). Takes priority over the sky.
   //   Sky_idle1      wide panorama (wraps all the way round, so it must tile sideways), used on the ceiling when there is
   //                  no Ceiling_idle1 (outdoor look). Scrolls as you turn, does not move when you walk.
+  //   Wall_idle1     tileable square picture for walls (one copy per tile face). Optional per wall style (stone/brick/tech
+  //                  in WALL_STYLES): Wall_Stone_idle1, Wall_Brick_idle1, Wall_Tech_idle1 override Wall_idle1 for that style.
+  //   Door_idle1     the same for doors (it rises as the door opens). Key doors are tinted with their key's colour.
+  //                  Shrunk to WALL_TEX x WALL_TEX when loaded. Secret doors use the wall picture so they stay hidden.
   // Any of them may be missing (a missing ceiling/floor is drawn dark); with none, or with TUNING.floorAndCeiling false,
-  // the old ASCII floor is used. Nukage tiles are painted as a flickering green on the same layer.
+  // the old ASCII floor is used. Without Wall_idle1 the walls stay ASCII (drawn on a black backing). Nukage tiles are
+  // painted as a flickering green on the same layer.
+  // Walls need a finer ray per pixel column than the 90 text columns, so paintFlats() casts FLAT_W rays itself (the 90
+  // text-column rays are still what sprites use to hide behind walls).
   // How: a canvas of FLAT_W x FLAT_H pixels (FLAT_SX x FLAT_SY pixels per text cell) sits UNDER the text. paintFlats()
   // fills it each frame: wall rows black (so the text walls stay solid), ceiling rows from the sky, floor rows from the
   // texture (world point = the same maths as floorCell). The ASCII layer leaves those cells blank.
-  const FLAT_SX = 4, FLAT_SY = 8, FLAT_W = W * FLAT_SX, FLAT_H = H * FLAT_SY, FLAT_TEX = 64;
-  let flatCtx = null, flatImage = null, skyPix = null, skyW = 0, skyH = 0, floorPix = null, ceilPix = null;
+  const FLAT_SX = 4, FLAT_SY = 8, FLAT_W = W * FLAT_SX, FLAT_H = H * FLAT_SY, FLAT_TEX = 64, WALL_TEX = 128;
+  let flatCtx = null, flatImage = null, skyPix = null, skyW = 0, skyH = 0, floorPix = null, ceilPix = null, wallPix = null, doorPix = null, stylePix = [], flatWalls = false;
+  const KEY_RGB = {};   // key id -> [r, g, b] tint for key doors
+  for (const [id, k] of Object.entries(KEYS)) { const h = k.color.replace('#', ''); KEY_RGB[id] = [...h].map(c => parseInt(c, 16) * 17); }
   const flatCos = new Float32Array(FLAT_W), flatSin = new Float32Array(FLAT_W), flatInv = new Float32Array(FLAT_W), skyCol = new Int32Array(FLAT_W);
   const flatPerp = new Float32Array(FLAT_H), flatShade = new Float32Array(FLAT_H), skyRow = new Int32Array(FLAT_H);
   for (let r = 0; r < FLAT_H; r++) {
@@ -2236,7 +2201,8 @@ export async function main(ns) {
   function buildFlats() {
     try {
       const sky = framesFor('SKY', 'idle')?.[0], floor = framesFor('FLOOR', 'idle')?.[0], ceil = framesFor('CEILING', 'idle')?.[0];
-      if (!sky && !floor && !ceil) return;
+      const wall = framesFor('WALL', 'idle')?.[0], door = framesFor('DOOR', 'idle')?.[0];
+      if (!sky && !floor && !ceil && !wall) return;
       flatCtx = flatCanvas.getContext('2d');
       flatCanvas.width = FLAT_W; flatCanvas.height = FLAT_H;
       flatImage = flatCtx.createImageData(FLAT_W, FLAT_H);
@@ -2246,6 +2212,12 @@ export async function main(ns) {
       }
       if (floor) floorPix = pixelsOf(floor, FLAT_TEX, FLAT_TEX);
       if (ceil) ceilPix = pixelsOf(ceil, FLAT_TEX, FLAT_TEX);
+      if (wall) {
+        wallPix = pixelsOf(wall, WALL_TEX, WALL_TEX);
+        doorPix = door ? pixelsOf(door, WALL_TEX, WALL_TEX) : null;
+        stylePix = WALL_STYLE_IDS.map(id => { const f = framesFor('WALL' + id.toUpperCase(), 'idle')?.[0]; return f ? pixelsOf(f, WALL_TEX, WALL_TEX) : wallPix; });
+        flatWalls = true;
+      }
     } catch (e) {
       flatCtx = null;
       ns.tprint(`WARNING: textured floor/sky disabled: ${e}`);
@@ -2260,14 +2232,43 @@ export async function main(ns) {
       const ang = pa + (cx / W - 0.5) * FOV;
       flatCos[c] = Math.cos(ang); flatSin[c] = Math.sin(ang); flatInv[c] = 1 / Math.cos(ang - pa);
       skyCol[c] = skyPix ? Math.floor((((ang / TAU) % 1) + 1) % 1 * skyW) : 0;
-      // Rows covered by the wall in this text column are painted black so the wall characters have a solid backing
-      const wx = Math.min(W - 1, Math.floor(cx));
-      const top = Math.max(0, Math.floor((H - frameWallH[wx]) / 2)) * FLAT_SY, bottom = Math.min(H, Math.floor((H - frameWallH[wx]) / 2) + frameWallH[wx]) * FLAT_SY;
+      // This column's wall. Textured walls: cast our own ray and find the picture column; otherwise the rows covered by
+      // the wall in the text column are painted black so the wall characters have a solid backing.
+      let top, bottom, vis = 0, hp = 0, wp = null, wtx = 0, wsh = 1, tint = null, slide = false;
+      if (flatWalls) {
+        const t = castRay(ang);
+        if (t < 100) {
+          const perp = t / flatInv[c], idx = hitTY * MW + hitTX, side = hitSide;
+          hp = Math.min(H + 12, H / (perp * 0.82)) * FLAT_SY;   // same height formula as the text walls, at pixel precision
+          top = (FLAT_H - hp) / 2; bottom = top + hp; vis = bottom;
+          const isDoor = tileAt(hitTX + 0.5, hitTY + 0.5) === TILE.DOOR;
+          wp = (isDoor && doorPix) || stylePix[wallStyle[idx] | 0] || wallPix;
+          if (isDoor) {
+            const dp = doorPos[idx];
+            if (dp > 0) { vis = top + hp * Math.max(0, 1 - dp * 1.6); slide = true; }   // an opening door rises (the text version does too)
+            tint = KEY_RGB[doorKey[idx]] || null;
+          }
+          let u = side === 0 ? py + flatSin[c] * t : px + flatCos[c] * t;
+          u -= Math.floor(u);
+          if ((side === 0 && flatCos[c] > 0) || (side === 1 && flatSin[c] < 0)) u = 1 - u;   // keep the picture the right way round
+          wtx = Math.min(WALL_TEX - 1, Math.floor(u * WALL_TEX));
+          wsh = Math.min(1, 1.25 / (1 + perp * 0.25)) * (side === 1 ? 0.8 : 1);
+        } else { top = bottom = vis = HALF; }
+      } else {
+        const wx = Math.min(W - 1, Math.floor(cx));
+        top = Math.max(0, Math.floor((H - frameWallH[wx]) / 2)) * FLAT_SY; bottom = vis = Math.min(H, Math.floor((H - frameWallH[wx]) / 2) + frameWallH[wx]) * FLAT_SY;
+      }
       for (let r = 0; r < FLAT_H; r++) {
         const o = (r * FW + c) * 4;
         let R = 0, G = 0, B = 0;
-        if (r >= top && r < bottom) { /* wall: black */ }
-        else if (r < HALF && ceilPix) {
+        if (r + 0.5 >= top && r + 0.5 < bottom) {
+          if (wp && r + 0.5 < vis) {   // textured wall pixel
+            const v = slide ? (r + 0.5 - (vis - hp)) / hp : (r + 0.5 - top) / hp;
+            const i = (Math.max(0, Math.min(WALL_TEX - 1, Math.floor(v * WALL_TEX))) * WALL_TEX + wtx) * 4;
+            if (tint) { const g = (wp[i] + wp[i + 1] + wp[i + 2]) / 3 * wsh * 1.3 / 255; R = g * tint[0]; G = g * tint[1]; B = g * tint[2]; }
+            else { R = wp[i] * wsh; G = wp[i + 1] * wsh; B = wp[i + 2] * wsh; }
+          }   // else: black (text wall backing, or the gap above a rising door)
+        } else if (r < HALF && ceilPix) {
           const perp = flatPerp[r];
           if (perp < VIEW_DIST) {
             const t = perp * flatInv[c], sh = Math.min(1, flatShade[r]);
@@ -2338,6 +2339,7 @@ export async function main(ns) {
     // Floor/sky picture layer (FLATS); when it is on, floor and ceiling cells are left blank so it shows through
     const flatsOn = TUNING.floorAndCeiling && paintFlats();
     flatCanvas.style.display = flatsOn ? 'block' : 'none';
+    const wallsOn = flatsOn && flatWalls;   // textured walls are on the canvas, so the wall characters are left blank
 
     // Walls + floor/ceiling
     for (let x = 0; x < W; x++) {
@@ -2362,7 +2364,9 @@ export async function main(ns) {
         if (y < top || y >= top + h) {
           grid[y][x] = TUNING.floorAndCeiling && !flatsOn ? floorCell(y, fcos, fsin, invCos) : ' ';
         }
-        else {
+        else if (wallsOn) {
+          grid[y][x] = ' ';
+        } else {
           if (isDoor) {
             grid[y][x] = y >= top + doorRows ? ' ' : doorTag + (dp > 0 ? ':' : d < 2.5 ? '+' : '|');
           } else if (isSecret) {

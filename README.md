@@ -19,21 +19,20 @@ run doom.js
 The game needs these files in the same place as `doom.js`: `map.txt` (the first level), `audio.json` (sounds) and
 `sprites.json` (art). They are all plain text because Bitburner can only store text files.
 
-## Launch flags (cheats, auto-update)
+## Launch flags (cheats)
 
-Settings are flags you add when you start the script, for example `run doom.js --godmode --noupdate`.
+Settings are flags you add when you start the script, for example `run doom.js --godmode --allweapons`.
 
 | Flag | Effect |
 |---|---|
-| `--noupdate` | skip the auto-update check |
 | `--godmode` | you never take damage |
 | `--infiniteammo` | weapons never run out of ammo |
 | `--allweapons` | start with every weapon and full ammo |
 | `--noautoswitch` | don't switch weapon automatically when the current one runs dry |
 | `--help` | print the list and quit |
 
-Flags can be combined in any order. An unknown flag is reported and ignored. The auto-updater restarts the game with the
-same flags. A web-page converter has to provide `ns.flags`; without it every flag is off.
+Flags can be combined in any order. An unknown flag is reported and ignored. A web-page converter has to provide `ns.flags`;
+without it every flag is off.
 
 On the title screen use **Left/Right** to pick the difficulty (easy, normal, hard) and **Enter** or **Space** to start.
 
@@ -187,8 +186,8 @@ sound you like; until `audio.json` has it, a placeholder plays.
 
 **Add a level**
 
-Draw a map file using the characters above and add one entry to `LEVELS`. Auto-update downloads new level files by
-itself.
+Draw a map file using the characters above and add one entry to `LEVELS`. `install.js` downloads every level file
+named in `LEVELS`.
 
 **Add a key colour**
 
@@ -211,15 +210,18 @@ The exploding barrel uses `Barrel_idle1`... (looped while it stands) and `Barrel
 The naming rule in one line: `{Type}_{walk|attack|death}{frame}`, plus one `{Type}_projectile` and one
 `{Type}_projectile_impact` for enemies that shoot (`Imp_walk1`, `Lost_Soul_death3`, `Cacodemon_projectile_impact`).
 
-## Floor, ceiling and sky
+## Walls, floor, ceiling and sky
 
-The game can draw a textured floor and ceiling (or a picture sky) instead of ASCII characters. They are entries in
-`sprites.json`: `Floor_idle1` and `Ceiling_idle1` (square tileable textures, one copy per map tile, drawn with
-perspective so they slide past as you walk and fade to dark with distance) and `Sky_idle1` (a wide panorama that tiles
-sideways and scrolls as you turn; used on the ceiling only when there is no `Ceiling_idle1`, e.g. for an outdoor look).
-Replace one by swapping that entry (`python sprites_tool.py add` refuses duplicates, so delete the old key first).
-Leave one out and that half is drawn dark; leave them all out and you get the old ASCII floor. Nukage tiles are
-painted as flickering green. `floorAndCeiling: false` in `TUNING` turns all of this off (faster).
+The game can draw textured walls, floor and ceiling (or a picture sky) instead of ASCII characters. They are entries in
+`sprites.json`: `Wall_idle1` (walls), `Door_idle1` (doors; key doors are tinted with their key's colour), `Floor_idle1`
+and `Ceiling_idle1` (square tileable textures, one copy per map tile, drawn with perspective so they move as you walk
+and fade to dark with distance) and `Sky_idle1` (a wide panorama that tiles sideways and scrolls as you turn; used on
+the ceiling only when there is no `Ceiling_idle1`, e.g. for an outdoor look). A wall style can have its own picture:
+`Wall_Stone_idle1`, `Wall_Brick_idle1` or `Wall_Tech_idle1` replace `Wall_idle1` for that style (all three use
+`Wall_idle1` for now). Replace a picture by swapping that entry (`python sprites_tool.py add` refuses duplicates, so
+delete the old key first). Leave one out and that part is drawn dark (floor/ceiling) or stays ASCII (walls); leave them
+all out and you get the old ASCII look. Nukage tiles are painted as flickering green. `floorAndCeiling: false` in
+`TUNING` turns all of this off (faster).
 
 ## Sounds
 
@@ -227,11 +229,13 @@ painted as flickering green. `floorAndCeiling: false` in `TUNING` turns all of t
 the game lists the placeholders in use when it starts. To replace one, add the sound's name to `audio.json`; it takes
 over by itself.
 
-## Auto-update, modding and running as a web page
+## Updating, modding and running as a web page
 
-- The game updates itself from the GitHub repo each time it starts. If you edit the script, start it with
-  `run doom.js --noupdate`, otherwise your changes can be overwritten by the repo's version.
-- If you change the script, keep `VERSION` (also near the top of `main`) in step with your edits: auto-update compares it.
+- There is no auto-update. When the game starts it checks the GitHub repo and, if the repo's `VERSION` is higher, prints
+  "New version available, run install.js to update." Run `install.js` to download the new files (it replaces `doom.js`,
+  the data files and the level maps, so keep a copy of anything you edited).
+- If you change the script, raise `VERSION` (also near the top of `main`) when you publish it: that is what players' version
+  check compares.
 - The only Bitburner-specific calls in `doom.js` are the `ns.*` ones, so a converter script can run the same file as an
   ordinary web page.
 
