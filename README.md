@@ -211,6 +211,15 @@ The exploding barrel uses `Barrel_idle1`... (looped while it stands) and `Barrel
 The naming rule in one line: `{Type}_{walk|attack|death}{frame}`, plus one `{Type}_projectile` and one
 `{Type}_projectile_impact` for enemies that shoot (`Imp_walk1`, `Lost_Soul_death3`, `Cacodemon_projectile_impact`).
 
+## Floor and sky
+
+The game can draw a picture sky on the ceiling and a textured floor instead of ASCII characters. They are two entries in
+`sprites.json`: `Sky_idle1` (a wide panorama that tiles sideways; it scrolls as you turn) and `Floor_idle1` (a square
+tileable texture, one copy per map tile, drawn with perspective so it slides past as you walk and fades to dark with
+distance). Replace either by swapping that entry (`python sprites_tool.py add` refuses duplicates, so delete the old key
+first). Leave one out and that half is drawn dark; leave both out and you get the old ASCII floor. Nukage tiles are
+painted as flickering green. `floorAndCeiling: false` in `TUNING` turns all of this off (faster).
+
 ## Sounds
 
 `audio.json` maps a sound name to a base64 WAV. If a sound the game wants is missing, a placeholder plays instead and
