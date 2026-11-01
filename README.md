@@ -100,9 +100,7 @@ ignored.
 | `d` | Demon | melee only, very aggressive; wakes when you open a door into its room |
 | `c` | Cacodemon | hovers and shoots |
 | `l` | Lost Soul | flies at you, explodes when killed |
-| `g` | Zombie Tank | a zombie in a tank: bursts of three bullets; blows up when destroyed |
-| `8` | Zombie Missile Tank | fires a missile from each side; blows up when destroyed |
-| `9` | Zombie Plasma Tank | fires plasma balls from both sides; blows up when destroyed |
+| `g` | Chaingunner | fast bursts of bullets |
 | `Z` | Zombie Sergeant | tougher shotgun zombie: a wide blast of seven pellets |
 | `B` | Baron of Hell | tough, green fireballs and a claw |
 | `m` | Cryobus | slow ice Mancubus: two fireballs per attack, one out of each arm; a hit freezes you in place for 3 seconds (you can still turn and shoot) |
@@ -163,6 +161,7 @@ just a new table entry. Each table has a comment explaining its fields.
    `Arachnotron_walk1`, `Arachnotron_attack1`, `Arachnotron_death1` and so on. Case and underscores are ignored when
    matching, so `Lost_Soul_walk1` belongs to `LOSTSOUL`.
 2. Give it an unused `mapChar` and put that character in a map. The game warns at startup if a character is used twice.
+   Enemies stand on the floor by default; give a flyer `render: { float: true }` to hover at eye level.
 3. List the sounds it uses. They should exist in `audio.json`; a missing one is reported at startup (see Sounds below).
 4. Without art it needs a `blob` (an ASCII body) so it is visible. The PNG art takes over once the sprite keys exist.
 5. If it fires something new, add an entry to `PROJECTILES`. Projectile art is ONE `<Type>_projectile` image plus ONE
@@ -230,14 +229,8 @@ over by itself.
 
 - The balance numbers (damage, hit points, how often enemies attack) are rough and not tuned.
 - Not implemented: teleporters and switches.
-- The three tanks (`g`, `8`, `9`) replaced the old Chaingunner. When one is destroyed it explodes (hurting you if you are within
-  about two tiles), smoke rises, its two guns fly off to the sides and rest on the floor, and a Zombie or Zombie Sergeant climbs
-  out of the wreck and comes for you (no points or kill for that one). These effects are the `onDeath` options `explode.art`,
-  `smoke`, `debris` and `spawn` in `doom.js` (documented in the ENEMIES legend), so any enemy can use them.
 - Art credits: the Cryobus sprites come from the "Cryocubus" Doom mod (code Thanuris, Ganbare-Lucifer, DeVloek; sprite
   edits 00_Zombie_00, Eriance and DeVloek; base art id Software). The Arch-vile and Pain Elemental sheets were ripped by
-  Grim and Harsh29 (spritedatabase.net / neuropod.net), who ask for credit. The three tanks, their explosion, smoke, gun parts,
-  missile and sounds come from the "Zombie Tank Pack" mod (compiled by Xim, Enjay and Devloek; code Xim and Enjay; sprites id Software,
-  3D Realms and David G, edited by Xim and Enjay; sounds id Software, 3D Realms and Valve; idea from the Pig Tank in Duke Nukem 3D).
+  Grim and Harsh29 (spritedatabase.net / neuropod.net), who ask for credit.
 - For people (or AI agents) changing the code: `doom.js` begins with an architecture manual covering how it is put
   together, the order things run in, and known pitfalls. Read that before editing.

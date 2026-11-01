@@ -492,7 +492,8 @@ const PROJECTILES = {
 //  hitbox     half-width of the area bullets hit; radius = how close it can get to walls
 //  points / killMsg / boss    score, message on death, and whether messages use the big red style
 //  anim       { walk, attack }  milliseconds per animation frame
-//  render     { scale: sprite size, fall: how far the corpse sinks, corpse: false = vanishes after dying }
+//  render     { scale: sprite size, float: true = flies (drawn at eye level; everything else stands on the floor),
+//               fall: how far a FLYING corpse sinks, corpse: false = vanishes after dying }
 //  sounds     { hurt, death }
 //  attacks    list of attacks, each rolls independently every tick:
 //               { kind: 'ranged' | 'melee', range: [min, max] tiles, chance: per tick, sound, volume,
@@ -545,7 +546,7 @@ const ENEMY_DEFAULTS = {
   blob: null, spawnable: true, spawnWeight: 1, prop: false,
   points: 50, killMsg: '- ENEMY DOWN -', boss: false,
   anim: { walk: 400, attack: 150 },
-  render: { scale: 1, fall: 0.8, corpse: true },
+  render: { scale: 1, fall: 0.8, corpse: true, float: false },
   sounds: {}, attacks: [],
 };
 
@@ -593,7 +594,7 @@ const ENEMIES = {
     mapChar: 'c', hp: 6, points: 300, killMsg: '** CACODEMON DEAD **',
     speed: 0,            // hovers in place and shoots; give it e.g. 0.008 to make it chase
     sight: 16, hitbox: 1.0,
-    render: { scale: 8, fall: 2.0 },
+    render: { scale: 8, fall: 2.0, float: true },
     sounds: { hurt: 'cacodemoninjured', death: 'cacodemondeath' },
     attacks: [
       { kind: 'ranged', projectile: 'cacofireball', range: [3, 12], chance: 0.08, sound: 'cacodemonattack', volume: 0.8 },
@@ -603,7 +604,7 @@ const ENEMIES = {
   LOSTSOUL: {
     mapChar: 'l', hp: 1, points: 75, killMsg: '* LOST SOUL DESTROYED *',
     anim: { walk: 200 },
-    render: { corpse: false }, painChance: 0,
+    render: { corpse: false, float: true }, painChance: 0,
     sounds: { hurt: 'lostsoulinjured', death: 'lostsouldeath' },
     attacks: [
       { kind: 'ranged', projectile: 'skull', range: [0, 8], chance: 0.035, sound: 'lostsoulattack', volume: 0.7 },
@@ -731,7 +732,7 @@ const ENEMIES = {
   PAINELEMENTAL: {
     mapChar: 'L', hp: 6, points: 400, killMsg: '** PAIN ELEMENTAL DESTROYED **',
     speed: 0.008, sight: 16, roam: 12, hitbox: 1.0, painChance: 0.2,
-    render: { scale: 6, fall: 2.0 }, spawnWeight: 0.5,
+    render: { scale: 6, fall: 2.0, float: true }, spawnWeight: 0.5,
     blob: { tag: '\x1A', chars: '@O*.', size: 1.0 },
     sounds: { hurt: 'painelementalinjured', death: 'painelementaldeath' },
     attacks: [
@@ -858,7 +859,7 @@ export async function main(ns) {
   // Consequences: the script must be named doom.js on 'home'; the repo's data files REPLACE the local ones; a local
   // edit survives only if run with --noupdate (AUTO_UPDATE false) or this VERSION is not lower than the repo's. Bump VERSION on every
   // release or nobody receives it. Any failure (network, bad JSON, timeout after 5 s) is non-fatal: the current version runs.
-  const VERSION = '43';
+  const VERSION = '44';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -2280,12 +2281,13 @@ export async function main(ns) {
         if (!def.render.corpse && e.deathFrame >= nDie * 2) continue;
         addSprite(e.x, e.y, {
           type: e.type, anim: 'die', step: Math.floor(e.deathFrame / 2), scale: def.render.scale,
-          fall: def.render.fall, fallT: Math.min(e.deathFrame / 16, 1)   // sinks over the first 16 ticks
+          fall: def.render.fall, fallT: Math.min(e.deathFrame / 16, 1),   // flying corpses sink over the first 16 ticks
+          ground: !def.render.float
         });
       } else if (e.alive) {
         addSprite(e.x, e.y, e.isAttacking
-          ? { type: e.type, anim: 'attack', ms: def.anim.attack, scale: def.render.scale, blob: def.blob }
-          : { type: e.type, anim: 'walk', ms: def.anim.walk, scale: def.render.scale, blob: def.blob });
+          ? { type: e.type, anim: 'attack', ms: def.anim.attack, scale: def.render.scale, blob: def.blob, ground: !def.render.float }
+          : { type: e.type, anim: 'walk', ms: def.anim.walk, scale: def.render.scale, blob: def.blob, ground: !def.render.float });
       }
     }
     for (const p of pickups) {
@@ -2349,7 +2351,7 @@ export async function main(ns) {
 
       const pixelX = screenX * charWidth;
       const wallCenterY = (Math.floor((H - h) / 2) + h / 2) * charHeight;
-      const deathFallOffset = fallT ? fallT * fall * imgH : 0;
+      const deathFallOffset = fallT && !ground ? fallT * fall * imgH : 0;   // only flyers sink; grounded corpses stay on the floor
       // Ceiling hangers: top edge at the top of the wall (kept on screen when you stand right under it)
       const wallTopY = Math.max(0, Math.floor((H - h) / 2) * charHeight);
       // Grounded decorations: bottom edge on the floor line (the bottom of the wall at that distance, kept on screen)
