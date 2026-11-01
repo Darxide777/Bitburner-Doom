@@ -494,6 +494,10 @@ const PROJECTILES = {
 //  hitbox     half-width of the area bullets hit; radius = how close it can get to walls
 //  points / killMsg / boss    score, message on death, and whether messages use the big red style
 //  anim       { walk, attack }  milliseconds per animation frame
+//  ENEMY SIZE note: an enemy's on-screen height is (picture height x zoom) and stays a fixed fraction of the wall height at every
+//  distance. Current targets: zombies/imp/demon 0.7, Baron/Arch-vile 0.8, Cacodemon/Pain Elemental 0.75, Lost Soul 0.5,
+//  tanks 0.9, Cryobus 0.85, Cyberdemon 1.3, Spider Mastermind 1.1 (original Doom: zombie 0.44, Cyberdemon 0.86).
+//  To resize one: zoom = target x 299 / picture height in pixels.
 //  render     { zoom: how many times bigger than its picture it is drawn when you are close (up to the near distance),
 //               near: the distance in tiles at which it reaches that full size. Closer than that it stops growing; further away it
 //               shrinks in proportion to the distance, like the walls do (default 1.5). float: true = flies (drawn at eye level;
@@ -560,7 +564,7 @@ const ENEMIES = {
   ZOMBIE: {
     mapChar: 'z', hp: 1, points: 50, killMsg: '- ZOMBIE DOWN -',
     sounds: { hurt: 'zombieinjured', death: 'zombiedeath' },
-    render: { zoom: 6 },   // about 330 px tall up close
+    render: { zoom: 3.8 },   // see ENEMY SIZE note
     attacks: [
       { kind: 'ranged', projectile: 'pellet', count: 5, spread: 0.2, range: [1.5, 12], chance: 0.015, sound: 'shotgun', volume: 0.6 },
       { kind: 'melee', damage: 4, range: [0, 0.8], chance: 0.018 },
@@ -570,7 +574,7 @@ const ENEMIES = {
   ZOMBIESERGEANT: {
     mapChar: 'Z', hp: 2, points: 90, killMsg: '- ZOMBIE SERGEANT DOWN -',
     sounds: { hurt: 'zombiesergeantinjured', death: 'zombiesergeantdeath' },
-    render: { zoom: 6 },   // about 330 px tall up close
+    render: { zoom: 3.8 },   // see ENEMY SIZE note
     attacks: [
       { kind: 'ranged', projectile: 'pellet', count: 7, spread: 0.3, range: [1.5, 12], chance: 0.02, sound: 'zombiesergeantattack', volume: 0.7 },
       { kind: 'melee', damage: 5, range: [0, 0.8], chance: 0.018 },
@@ -579,7 +583,7 @@ const ENEMIES = {
   IMP: {
     mapChar: 'i', hp: 2, points: 100, killMsg: '* IMP KILLED *',
     anim: { walk: 300 },
-    render: { zoom: 5.8 },   // about 330 px tall up close
+    render: { zoom: 3.7 },   // see ENEMY SIZE note
     sounds: { hurt: 'impinjured', death: 'impdeath' },
     attacks: [
       { kind: 'ranged', projectile: 'fireball', range: [1.5, 10], chance: 0.02, sound: 'impattack', volume: 0.7 },
@@ -593,7 +597,7 @@ const ENEMIES = {
     // then bites about twice a second (chance 0.08 per tick, 25 ticks/s). Has no ranged attack on purpose.
     // wakeOnDoor: opening a door into its room sets it off immediately, even from the far side of a big room.
     speed: 0.045, sight: 20, roam: 40, painChance: 0.1, stopDistance: 0.75, wakeOnDoor: true, relentless: true,
-    anim: { walk: 200 }, render: { zoom: 5.7 },   // about 330 px tall up close
+    anim: { walk: 200 }, render: { zoom: 3.6 },   // see ENEMY SIZE note
     sounds: { hurt: 'demoninjured', death: 'demondeath' },
     attacks: [
       { kind: 'melee', damage: 8, range: [0, 1.1], chance: 0.08, sound: 'demonattack', volume: 0.8 },
@@ -603,7 +607,7 @@ const ENEMIES = {
     mapChar: 'c', hp: 6, points: 300, killMsg: '** CACODEMON DEAD **',
     speed: 0,            // hovers in place and shoots; give it e.g. 0.008 to make it chase
     sight: 16, hitbox: 1.0,
-    render: { zoom: 4.6, fall: 2.0, float: true },
+    render: { zoom: 3.4, fall: 2.0, float: true },
     sounds: { hurt: 'cacodemoninjured', death: 'cacodemondeath' },
     attacks: [
       { kind: 'ranged', projectile: 'cacofireball', range: [3, 12], chance: 0.08, sound: 'cacodemonattack', volume: 0.8 },
@@ -613,7 +617,7 @@ const ENEMIES = {
   LOSTSOUL: {
     mapChar: 'l', hp: 1, points: 75, killMsg: '* LOST SOUL DESTROYED *',
     anim: { walk: 200 },
-    render: { zoom: 5, corpse: false, float: true }, painChance: 0,
+    render: { zoom: 3.2, corpse: false, float: true }, painChance: 0,
     sounds: { hurt: 'lostsoulinjured', death: 'lostsouldeath' },
     attacks: [
       { kind: 'ranged', projectile: 'skull', range: [0, 8], chance: 0.035, sound: 'lostsoulattack', volume: 0.7 },
@@ -624,7 +628,7 @@ const ENEMIES = {
     mapChar: 'Y', hp: 30, points: 5000, killMsg: '★★ CYBERDEMON SLAIN ★★', boss: true,
     speed: e => 0.009 + (1 - e.hp / e.maxHp) * 0.008,   // speeds up as it gets hurt
     sight: 25, roam: 18, hitbox: 1.2, painChance: 0.05,
-    render: { zoom: 4.2, fall: 3.0 },
+    render: { zoom: 3.6, fall: 3.0 },
     sounds: { hurt: 'cyberdemoninjured', death: 'cyberdemondeath' },
     attacks: [
       { kind: 'ranged', projectile: 'cyberdemonrocket', range: [3, 20], chance: 0.03, sound: 'cyberdemonattack', volume: 1.0 },
@@ -638,7 +642,7 @@ const ENEMIES = {
   BARON: {
     mapChar: 'B', hp: 12, points: 600, killMsg: '** BARON OF HELL SLAIN **',
     speed: 0.014, sight: 18, roam: 20, hitbox: 0.9, painChance: 0.08,
-    anim: { walk: 300 }, render: { zoom: 4.5, fall: 1.5 },
+    anim: { walk: 300 }, render: { zoom: 3.3, fall: 1.5 },
     blob: { tag: '\x1D', chars: '@O*.', size: 0.9 },
     sounds: { hurt: 'baroninjured', death: 'barondeath' },
     attacks: [
@@ -649,7 +653,7 @@ const ENEMIES = {
   SPIDERMASTERMIND: {
     mapChar: 'M', hp: 50, points: 8000, killMsg: '★★ SPIDER MASTERMIND SLAIN ★★', boss: true,
     speed: 0.010, sight: 30, roam: 30, hitbox: 1.4, radius: 0.5, painChance: 0.02,
-    render: { zoom: 3.4, fall: 3.0 }, spawnWeight: 0.15,
+    render: { zoom: 3.0, fall: 3.0 }, spawnWeight: 0.15,
     blob: { tag: '\x16', chars: '@#*:', size: 1.6 },
     sounds: { hurt: 'spidermastermindinjured', death: 'spidermasterminddeath' },
     attacks: [
@@ -665,7 +669,7 @@ const ENEMIES = {
   ZOMBIETANK: {
     mapChar: 'g', hp: 12, points: 350, killMsg: '** ZOMBIE TANK DESTROYED **',
     speed: 0.010, sight: 16, roam: 12, hitbox: 0.85, radius: 0.45, painChance: 0.08, spawnWeight: 0.5,
-    anim: { walk: 220 }, render: { zoom: 4.6, fall: 0.5 },
+    anim: { walk: 220 }, render: { zoom: 3.8, fall: 0.5 },
     blob: { tag: '\x1E', chars: '#*:.', size: 0.6 },
     sounds: { hurt: 'zombietankinjured', death: 'zombietankdeath' },
     attacks: [
@@ -681,7 +685,7 @@ const ENEMIES = {
   ZOMBIEMISSILETANK: {
     mapChar: '8', hp: 14, points: 500, killMsg: '** MISSILE TANK DESTROYED **',
     speed: 0.009, sight: 18, roam: 12, hitbox: 0.85, radius: 0.45, painChance: 0.06, spawnWeight: 0.4,
-    anim: { walk: 220 }, render: { zoom: 4.6, fall: 0.5 },
+    anim: { walk: 220 }, render: { zoom: 3.8, fall: 0.5 },
     blob: { tag: '\x18', chars: '#*:.', size: 0.6 },
     sounds: { hurt: 'zombietankinjured', death: 'zombietankdeath' },
     attacks: [
@@ -697,7 +701,7 @@ const ENEMIES = {
   ZOMBIEPLASMATANK: {
     mapChar: '9', hp: 12, points: 450, killMsg: '** PLASMA TANK DESTROYED **',
     speed: 0.010, sight: 16, roam: 12, hitbox: 0.85, radius: 0.45, painChance: 0.08, spawnWeight: 0.4,
-    anim: { walk: 220 }, render: { zoom: 4.6, fall: 0.5 },
+    anim: { walk: 220 }, render: { zoom: 3.8, fall: 0.5 },
     blob: { tag: '\x1C', chars: '#*:.', size: 0.6 },
     sounds: { hurt: 'zombietankinjured', death: 'zombietankdeath' },
     attacks: [
@@ -715,7 +719,7 @@ const ENEMIES = {
     speed: 0.007, sight: 16, roam: 14, hitbox: 1.0, painChance: 0.05,
     // Art: Cryocubus mod sprites (front-facing frames; walk 1-6, attack 1-3, death 1-6). scale/fall are guesses: tune in play.
     anim: { walk: 250 },
-    render: { zoom: 4.7, fall: 2.0 },
+    render: { zoom: 3.9, fall: 2.0 },
     blob: { tag: '\x1B', chars: '@O*.', size: 1.1 },
     sounds: { hurt: 'cryobusinjured', death: 'cryobusdeath' },
     attacks: [
@@ -741,7 +745,7 @@ const ENEMIES = {
   PAINELEMENTAL: {
     mapChar: 'L', hp: 20, points: 400, killMsg: '** PAIN ELEMENTAL DESTROYED **',
     speed: 0.012, sight: 16, roam: 12, hitbox: 1.0, painChance: 0.2, flee: { dist: 8, ticks: 60 },
-    render: { zoom: 5, fall: 2.0, float: true }, spawnWeight: 0.5,
+    render: { zoom: 3.9, fall: 2.0, float: true }, spawnWeight: 0.5,
     blob: { tag: '\x1A', chars: '@O*.', size: 1.0 },
     sounds: { hurt: 'painelementalinjured', death: 'painelementaldeath' },
     attacks: [
@@ -753,7 +757,7 @@ const ENEMIES = {
     // Fast and keeps its distance (stopDistance) while it summons a random enemy from anywhere in the game.
     // spawnable: false so it can never summon another Arch-vile.
     speed: 0.03, sight: 20, roam: 25, hitbox: 0.7, painChance: 0.1, stopDistance: 9, flee: { dist: 7, ticks: 70 }, relentless: true, spawnable: false,
-    render: { zoom: 4.3, fall: 1.0 },
+    render: { zoom: 3.1, fall: 1.0 },
     blob: { tag: '\x19', chars: '@O*.', size: 0.6 },
     sounds: { hurt: 'archvileinjured', death: 'archviledeath' },
     attacks: [
@@ -859,7 +863,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '63';
+  const VERSION = '64';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
