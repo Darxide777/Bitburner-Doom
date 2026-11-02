@@ -34,6 +34,7 @@ Settings are flags you add when you start the script, for example `run doom.js -
 | `--allweapons` | start with every weapon and full ammo |
 | `--noautoswitch` | don't switch weapon automatically when the current one runs dry |
 | `--reset` | forget your points, store purchases, weapon unlocks, deaths and run history: start from zero |
+| `--bench` | unattended ARENA benchmark (see "Benchmark mode" below); `--benchsecs N` (seconds per round, default 60, at least 10), `--benchfrom N` (first round, default 20), `--benchstep N` (rounds added each time, default 10), `--benchmax N` (last round, default 150) |
 | `--help` | print the list and quit |
 
 Flags can be combined in any order. An unknown flag is reported and ignored. A web-page converter has to provide `ns.flags`;
@@ -114,6 +115,14 @@ Every run on any level is measured while you play and logged when it ends (death
   `[second, fps, avg work, max work, avg update, avg render, enemies, projectiles, effects, DOM sprites, heap MB]`). Read it with `cat doom_bench.txt` in the terminal or copy it out of the game's
   file editor. `--reset` does not clear it. Cheat-flag runs are marked.
 - **Snapshots:** every 30 seconds of play a shorter line with `"r":"SNAP"` (the last 30 seconds of the timeline) is appended too, so a crash or freeze still leaves data up to that point. The normal full line is written when the run ends.
+### Benchmark mode
+
+`run doom.js --bench` needs no keyboard: it skips the title screen, picks the ARENA, turns on every cheat (the runs are marked `cheats:true` and earn nothing), puts you inside the big room just past the door and lets
+the round run for `--benchsecs` seconds (default 60). It then logs the run (result `BENCH`), raises the round by `--benchstep` (default 10) and starts again. It stops when the round passes `--benchmax` (default 150), when a
+round's average work per frame is over twice the budget (80 ms: the game is unplayable by then) or when you press Esc. Your saved progress (round, points, purchases) is not read from or written to; the rounds come from the flags.
+Example: `run doom.js --bench --benchfrom 30 --benchstep 10 --benchsecs 45` runs rounds 31, 41, 51 and so on. The one-line result of every round is printed to the terminal and every round gets its full line in `doom_bench.txt`
+(plus the 30-second snapshots), so you can leave it running and read the file afterwards. F3 still shows the live line, and F4 kills everything if you want to watch a round clear.
+
 - **F3** shows a live line (fps, work ms, enemies, projectiles) in the HUD in place of the position.
 
 ## HANGAR (E1M1)
@@ -334,6 +343,9 @@ all out and you get the old ASCII look. Nukage tiles are painted as flickering g
 `audio.json` maps a sound name to a base64 WAV. If a sound the game wants is missing, a placeholder plays instead and
 the game lists the placeholders in use when it starts. To replace one, add the sound's name to `audio.json`; it takes
 over by itself.
+
+Sounds from the world (enemies, explosions) are limited to 32 playing at once and 6 of one kind (`MAX_WORLD_VOICES`, `MAX_VOICES_PER_SOUND` in `doom.js`): in the late ARENA rounds, with hundreds of enemies shooting,
+the browser's audio engine was flooded and all sound stopped. Your own weapon and menu sounds are never dropped.
 
 ## Updating, modding and running as a web page
 

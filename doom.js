@@ -950,17 +950,23 @@ export async function main(ns) {
   //   --help          print this list and quit
   // Flags are read by ns.flags (the only way settings enter the game). A flag that isn't in FLAG_SCHEMA is reported and
   // ignored. If ns.flags is missing (some web-page converters) every flag is simply off.
-  const FLAG_SCHEMA = [['help', false], ['godmode', false], ['infiniteammo', false], ['allweapons', false], ['noautoswitch', false], ['reset', false]];
+  const FLAG_SCHEMA = [['help', false], ['godmode', false], ['infiniteammo', false], ['allweapons', false], ['noautoswitch', false], ['reset', false], ['bench', false], ['benchsecs', 60], ['benchfrom', 20], ['benchstep', 10], ['benchmax', 150]];
   const flags = typeof ns.flags === 'function' ? ns.flags(FLAG_SCHEMA) : Object.fromEntries(FLAG_SCHEMA);
   if (flags.help) {
-    ns.tprint('doom.js flags:  --godmode (no damage)  --infiniteammo  --allweapons (every weapon, full ammo)  --noautoswitch (no automatic weapon switch)  --reset (forget your points, purchases, deaths and run history)  --help');
+    ns.tprint('doom.js flags:  --godmode (no damage)  --infiniteammo  --allweapons (every weapon, full ammo)  --noautoswitch (no automatic weapon switch)  --reset (forget your points, purchases, deaths and run history)  --bench (unattended ARENA benchmark, see the README: --benchsecs N seconds per round, --benchfrom N first round, --benchstep N rounds to add each time, --benchmax N last round)  --help');
     return;
   }
   const unknownFlags = Object.keys(flags).filter(k => k !== '_' && !FLAG_SCHEMA.some(f => f[0] === k)).map(k => `--${k}`).concat((flags._ || []).map(String));
   if (unknownFlags.length) ns.tprint(`doom.js: ignoring unknown arguments: ${unknownFlags.join(' ')}  (run doom.js --help for the list)`);
-  const INFINITE_HEALTH = !!flags.godmode;
-  const INFINITE_AMMO = !!flags.infiniteammo;
-  const ALL_WEAPONS = !!flags.allweapons;
+  // BENCHMARK MODE (--bench): skips the title screen, picks the ARENA, turns on every cheat (so the run is marked cheats:true and earns nothing), stands the player inside the big room and
+  // lets each round run for BENCH_SECS seconds. Then it logs the run (result 'BENCH'), raises the round by BENCH_STEP and starts again, until BENCH_MAX is passed, the
+  // average work per frame of a round is over twice the frame budget (the game is unplayable by then), or Esc is pressed. Your saved progress (rounds, points, purchases) is never touched or written.
+  const BENCH = !!flags.bench;
+  const BENCH_SECS = Math.max(10, Math.floor(Number(flags.benchsecs)) || 60), BENCH_FROM = Math.max(0, Math.floor(Number(flags.benchfrom)) || 0);
+  const BENCH_STEP = Math.max(1, Math.floor(Number(flags.benchstep)) || 10), BENCH_MAX = Math.max(BENCH_FROM, Math.floor(Number(flags.benchmax)) || 150);
+  const INFINITE_HEALTH = !!flags.godmode || BENCH;
+  const INFINITE_AMMO = !!flags.infiniteammo || BENCH;
+  const ALL_WEAPONS = !!flags.allweapons || BENCH;
   // SAVED PROGRESS (PROGRESS_FILE, JSON text): `deaths`, `avBest` (most Arch-viles killed in one run, unlocks store weapons), `arena` (the ARENA round), `points` (banked score to spend in the STORE), `buys` (STORE id -> times bought), `inv` (STORE id -> consumables in stock) and `runs`, the history of every run you have finished, which keeps
   // growing after you win (only the last MAX_RUNS are kept). A run is one attempt, ended by dying or by reaching the exit; each entry is
   //   { n: run number, r: 'DIED' | 'WON', lv: level, t: seconds, k: kills, kt: kill total, sc: score, hp: health you started with,
@@ -985,12 +991,13 @@ export async function main(ns) {
       } else deaths = Math.max(0, parseInt(raw, 10) || 0);
     } catch (e) { deaths = 0; runs = []; points = 0; buys = {}; inv = {}; avBest = 0; arenaRound = 0; }
   }
+  if (BENCH) arenaRound = BENCH_FROM;
   const MAX_RUNS = 200;
   const CHEATING = INFINITE_HEALTH || INFINITE_AMMO || ALL_WEAPONS;
   // Bitburner kills a script that calls ANY ns function while its main loop is waiting in ns.sleep ("concurrent calls"), which is exactly where
   // key and click handlers run. So handlers (store purchases, using an item) only set saveDirty, and the frame loop writes the file between its sleeps.
   let saveDirty = false;
-  const saveProgress = () => { try { ns.write(PROGRESS_FILE, JSON.stringify({ deaths, avBest, arena: arenaRound, points, buys, inv, runs: runs.slice(-MAX_RUNS) }), 'w'); } catch (e) { } };
+  const saveProgress = () => { if (BENCH) return; try { ns.write(PROGRESS_FILE, JSON.stringify({ deaths, avBest, arena: arenaRound, points, buys, inv, runs: runs.slice(-MAX_RUNS) }), 'w'); } catch (e) { } };
   if (flags.reset) saveProgress();
   // Adds the run that just ended (result 'DIED' or 'WON') to the history and saves it. Call once, after endTime and score are final.
   let bankedScore = 0;   // how much of the current `score` is already in `points` (the score carries over between levels of one run, so only the new part is banked)
@@ -1010,7 +1017,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '108';
+  const VERSION = '110';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1839,12 +1846,20 @@ export async function main(ns) {
   // Play a sound by name. Unknown names are silent (checkGameData reports them once at startup).
   // Fire-and-forget playback by sound name. Resolution order: sfx[name], then sfx[SOUND_FALLBACKS[name]], else silence.
   // Only ONE level of fallback is followed. `pan` is -1 (left) .. 1 (right); 0 skips the panner node entirely. Each
-  // call creates new source and gain nodes (they are garbage collected when the sound ends); there is no voice limit.
+  // call creates new source and gain nodes (they are garbage collected when the sound ends). play() itself never refuses a sound, but it counts the sounds
+  // playing (voices, voicesByName); playAt() refuses world sounds when too many are already playing (MAX_WORLD_VOICES overall, MAX_VOICES_PER_SOUND of one kind), because
+  // hundreds of enemies in a late ARENA round used to flood the browser's audio engine until ALL sound stopped.
   // Use playAt() for sounds that happen somewhere in the world.
+  const MAX_WORLD_VOICES = 32, MAX_VOICES_PER_SOUND = 6;
+  let voices = 0;
+  const voicesByName = {};
   function play(name, volume = 1.0, pan = 0) {
     const buffer = sfx[name] ?? sfx[SOUND_FALLBACKS[name]];   // missing sound -> placeholder (or silence)
     if (!buffer) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => { });   // (the browser may suspend it; this is not an ns call, so it is safe anywhere)
     const src = audioCtx.createBufferSource();
+    voices++; voicesByName[name] = (voicesByName[name] || 0) + 1;
+    src.onended = () => { voices--; voicesByName[name]--; };
     const gain = audioCtx.createGain();
     gain.gain.value = volume;
     src.buffer = buffer;
@@ -1867,6 +1882,7 @@ export async function main(ns) {
     let v = volume * Math.max(0, 1 - d / TUNING.soundRange);
     if (d > 1.5 && !hasLineOfSight(x, y, px, py)) v *= 0.5;
     if (v < 0.02) return;
+    if (voices >= MAX_WORLD_VOICES || (voicesByName[name] || 0) >= MAX_VOICES_PER_SOUND) return;   // too many already playing: skip this one
     play(name, v, d < 1 ? 0 : Math.sin(Math.atan2(dy, dx) - pa));
   }
 
@@ -3186,7 +3202,8 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   // key press does not carry into the game. Heavy work (sprite decode, sound decode, validation, music) is done after
   // that, so the title appears at once. ESC at any point before the game loop goes straight to cleanup().
   hud.style.display = 'none';
-  let onTitle = true, blinkState = true, blinkCounter = 0, prevL = false, prevR = false, prevU = false, prevDn = false;
+  if (BENCH) selLevel = Math.max(0, LEVELS.findIndex(l => l.arena));
+  let onTitle = !BENCH, blinkState = true, blinkCounter = 0, prevL = false, prevR = false, prevU = false, prevDn = false;
   const difficultyIds = Object.keys(DIFFICULTIES);
   while (onTitle && running) {
     blinkCounter++;
@@ -4174,6 +4191,26 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     perfLine = `${out.round ? 'ROUND ' + out.round + '  ' : ''}PERF ${fps} FPS  work ${out.work[0]}/${out.work[2]}/${out.work[4]} ms  peak ${p.pk.en} enemies` + (p.firstSlow ? `  slowed at ${p.firstSlow[1]}` : '');
     try { ns.write(BENCH_FILE, JSON.stringify(out) + '\n', 'a'); } catch (e) { }
     try { ns.tprint(`doom.js perf: ${line}`); } catch (e) { }
+    return out;
+  }
+
+  // BENCHMARK MODE helpers (see BENCH). benchPlace puts the player inside the big room, just past the door, facing east (no enemy spawns in the first `safeColumns` columns).
+  // benchNext is called when a round's time is up: returns true if another (harder) round was started, false when the benchmark is over.
+  function benchPlace() {
+    const R = LEVELS[levelIndex].arena.room;
+    px = R.x0 + 1.5; py = Math.floor((R.y0 + R.y1) / 2) + 0.5; pa = 0;
+  }
+  function benchNext(out) {
+    const unplayable = !!out && out.work[0] > 2 * TARGET_FRAME_MS;
+    arenaRound += BENCH_STEP;
+    if (unplayable || arenaRound > BENCH_MAX) {
+      try { ns.tprint(`doom.js bench: finished${unplayable ? ` - the game was unplayable at round ${runRound + 1} (average work ${out.work[0]} ms per frame)` : ` - reached the last round (${BENCH_MAX})`}. Details in ${BENCH_FILE}.`); } catch (e) { }
+      running = false;
+      return false;
+    }
+    startLevel(levelIndex, 'fresh');
+    benchPlace();
+    return true;
   }
 
   // FRAME LOOP. Each iteration: add the real time since the last iteration to an accumulator (capped at
@@ -4187,6 +4224,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
 
   try {
     startLevel(selLevel, 'fresh');
+    if (BENCH) { benchPlace(); ns.tprint(`doom.js BENCHMARK: ARENA from round ${BENCH_FROM + 1}, ${BENCH_SECS} s per round, +${BENCH_STEP} rounds each time, up to round ${BENCH_MAX + 1}. Cheats are on, saved progress is not touched. Esc stops it.`); }
     inGame = true;
     let last = Date.now(), acc = 0, prevEnter = false, prevH = false, prevStart = nowMs();
     while (running) {
@@ -4218,9 +4256,10 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
         updateHud();
         const t2 = nowMs();
         perfFrame(interval, t2 - t0, t1 - t0, t2 - t1, dropped);
+        if (BENCH && perf && !perf.done && perf.active >= BENCH_SECS * 1000) { if (benchNext(finishPerf('BENCH'))) { last = Date.now(); acc = 0; } }
       } else {
         // End screen: draw once (the clock is frozen at endTime), then wait for Enter
-        if (!endDrawn) { finishPerf(won ? 'WON' : 'DIED'); renderEndScreen(won); endDrawn = true; prevEnter = !!keys['Enter']; }
+        if (!endDrawn) { const out = finishPerf(won ? 'WON' : 'DIED'); if (BENCH) { if (benchNext(out)) { last = Date.now(); acc = 0; } continue; } renderEndScreen(won); endDrawn = true; prevEnter = !!keys['Enter']; }
         acc = 0;
         const hKey = !!keys['h'];
         if (hKey && !prevH) { showHistory = !showHistory; endDrawn = false; }   // H toggles the full run history
