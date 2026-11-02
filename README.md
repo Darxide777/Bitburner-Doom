@@ -64,7 +64,7 @@ On the title screen use **Left/Right** to pick the difficulty (easy, normal, har
 | Enter | After dying: retry the level. After winning: play the level again. On the title screen: start (Up/Down level, Left/Right difficulty) |
 | Esc | Quit (with the mouse captured, the first Esc only releases it) |
 
-Weapons: 1 Pistol, 2 Shotgun, 3 Chaingun, 4 Rocket Launcher, 5 Plasma Rifle, 6 BFG 9000, 7 Chainsaw. **The BFG clears the room:** when its ball goes off it kills every enemy it can see (up to 40 tiles), whatever their health, and cancels summons that were about to appear. Only the Arch-vile, Cyberdemon and Spider Mastermind survive it: they take 15 damage per blast if within 5 tiles of it (3 blasts for an Arch-vile, 2 for a Cyberdemon, 4 for a Spider Mastermind at their base health; an Arch-vile is still shielded until 20 of its summons are dead, which the BFG makes quick). See `clearRoom` on `bfgball` in `PROJECTILES`. You start with
+Weapons: 1 Pistol, 2 Shotgun, 3 Chaingun, 4 Rocket Launcher, 5 Plasma Rifle, 6 BFG 9000, 7 Chainsaw. **The BFG clears the room:** when its ball goes off it kills every enemy it can see (up to 40 tiles), whatever their health, and cancels summons that were about to appear. Only the Arch-vile, Cyberdemon and Spider Mastermind survive it, and only a **direct hit** of the ball hurts them: it takes 35% of their max health (3 hits each); the blast itself does nothing to them (an Arch-vile is still shielded until enough of its summons are dead, which the BFG makes quick). See `clearRoom` on `bfgball` in `PROJECTILES`. You start with
 only the chainsaw; everything else is bought in the store (see below). Health, armor, ammo and weapons carry over to the next level. If you die you restart the level with
 the loadout your purchases give.
 
@@ -81,15 +81,20 @@ On the title screen, **Up/Down choose the level** and Left/Right the difficulty.
 ## ARENA (the benchmark level)
 
 The ARENA has no map file: **the game generates it every time you enter it.** It is a small start room with the store cabinet, a door, and **one big square room**.
-- **Size:** the room starts at 30 x 30 and gets 6 tiles wider and taller for every 5 more Arch-viles (so every 10 rounds, up to 66 x 66): `size` in the ARENA entry of `LEVELS`.
+- **Size:** the room starts at 30 x 30 and gets 4 tiles wider and taller every 5 rounds (up to 66 x 66 from round 45): `size` in the ARENA entry of `LEVELS`.
 - **Hazards:** random nukage pools (one per 300 tiles of floor, 3 to 6 tiles across) and exploding barrels (one per 80 tiles), in new places each time, so a bigger room has more of them. The columns next to the door stay clear.
-- **Enemies:** Arch-viles only: **1 in round 1 and 2, then one more every second round** (round 3 has 2, round 5 has 3, round 7 has 4). Each summons a random enemy again and again and is shielded until 20 of its summons are dead, so the mix of enemies is random and comes from the summoning.
+- **Enemies:** Arch-viles only: **always exactly one**. It is shielded until a number of its summons are dead: 20 in round 1, **2 more every round** (round 11 needs 40, round 60 needs 138). The enemies themselves get tougher every single round (health, damage, fire rate, projectile and summon speed). It summons a random enemy again and again, so the mix of enemies is random and comes from the summoning.
   **Clear the room (every enemy dead, summons included) to win.** The BFG is the tool for the summons (see Weapons).
 
-**Every clear makes the next round harder; dying does not** (you retry the same round, with whatever your points have bought; the round is saved in `doom_progress.txt`; `--reset` zeroes it). Every round is meant to be winnable, but the later ones should take a few tries and some store upgrades. Per round, all enemies get: **+10% hit points, +6% damage to you,
+**Every clear makes the next round harder, by an amount that depends on how you played** (`pace` in the ARENA entry of `LEVELS`; the difficulty is saved in `doom_progress.txt`, `--reset` zeroes it, and it can be fractional, e.g. "round 7.5"):
+- **Clear time:** under 2 minutes +1.5, under 3 minutes +1.25, under 4 minutes +1, **over 4 minutes +0** (you retry the same difficulty; the clear still counts for weapon unlocks).
+- **Health:** finishing with under 25% of your max health halves that step.
+- **Points:** a clear under 2 minutes pays 1.5x the points, over 4 minutes 0.75x.
+- **Deaths:** dying does not raise the difficulty, and from the 2nd death in a row on the same room each death takes 0.3 off it until you win.
+Every round is meant to be winnable, but the later ones should take a few tries and some store upgrades (the weapon unlocks go by whole rooms cleared, not by the difficulty). Every round is meant to be winnable, but the later ones should take a few tries and some store upgrades. Per round, all enemies get: **+10% hit points, +6% damage to you,
 +5% attack rate** (this also makes summoners summon more often), **+3% shot speed** (up to 2x), **+3% walking speed** (up to 2x) and **+8% summoning**: how many enemies a summoner may have alive,
 the game-wide summon cap (`TUNING.maxEnemies`) and how many it summons per cast, and a shorter warning before they appear. The numbers are `growth` in the ARENA entry of `LEVELS`; set a large round in
-`doom_progress.txt` (`"arena": 60`) to jump straight to a heavy one (that is 31 Arch-viles in a 66 x 66 room). It doubles as the benchmark: use `--bench` (below) to find out how much the game can take before it slows down or crashes. Measured on one PC: it stays smooth up to about 600 enemies and 4,000 shots and falls to ~7 fps at about 700 and 5,000.
+`doom_progress.txt` (`"arena": 60`; `"clears"` is the number of rooms cleared, for the weapon unlocks) to jump straight to a heavy one (that is a 66 x 66 room, 138 summons to kill before the Arch-vile can be hurt, and enemies with 7x health). It doubles as the benchmark: use `--bench` (below) to find out how much the game can take before it slows down or crashes. Measured on one PC: it stays smooth up to about 600 enemies and 4,000 shots and falls to ~7 fps at about 700 and 5,000.
 
 ### Performance log
 
@@ -130,9 +135,10 @@ Enter (or B) buys, Esc closes; or click a tab, a row or its BUY button. Purchase
 
 | Tab | What it sells |
 |---|---|
-| WEAPONS | pistol, shotgun, chaingun, rocket launcher, plasma rifle, BFG 9000 (each starts with some ammo; you always have the chainsaw). The pistol and shotgun are for sale from the start; **the rest are locked until you kill Arch-viles** (on HANGAR the boss counts as the first): the 1st unlocks the chaingun, the 2nd the rocket launcher, the 3rd the plasma rifle and the 4th the BFG. **On the ARENA the unlocks come from clearing rooms instead: every second clear unlocks the next weapon** (clear 2 the chaingun, 4 the rocket launcher, 6 the plasma rifle, 8 the BFG), and the clear after each unlock has one more Arch-vile. Dying unlocks nothing. The best unlock level you reach on either is saved, so an unlock is permanent |
-| AMMO | extra starting ammo for each type (+50 bullets, +8 shells, +4 rockets, +40 cells per purchase; the price rises 25% each time) |
-| SURVIVAL | +10 starting health (repeatable), +25 starting armor (up to 4 times) |
+| WEAPONS | pistol, shotgun, chaingun, rocket launcher, plasma rifle, BFG 9000 (each starts with some ammo; you always have the chainsaw). The pistol and shotgun are for sale from the start; **the rest are locked until you kill Arch-viles** (on HANGAR the boss counts as the first): the 1st unlocks the chaingun, the 2nd the rocket launcher, the 3rd the plasma rifle and the 4th the BFG. **On the ARENA the unlocks come from clearing rooms instead: every second clear unlocks the next weapon** (clear 2 the chaingun, 4 the rocket launcher, 6 the plasma rifle, 8 the BFG).  Dying unlocks nothing. The best unlock level you reach on either is saved, so an unlock is permanent |
+| UPGRADES | permanent buffs, each level adds to the last (the price rises 50% per level): **DAMAGE** +10% damage with every weapon (10 levels), **FIRE RATE** +10% shots per second (8 levels), **MOVEMENT SPEED** +5% walking and strafing speed (6 levels), **REGENERATION** +0.5 health per second up to the max health you have bought (6 levels), **TURN SPEED** +10% turning speed with keys and mouse (6 levels), **POWER-UP TIME** +15% duration of berserk, invulnerability and the radiation suit (6 levels). They apply at once and to every later run; `buff` and `per` in the `STORE` table |
+| AMMO | extra starting ammo for each type (+50 bullets, +8 shells, +4 rockets, +40 cells, +1 BFG cell per purchase; the price rises 25% each time, 50% for the BFG cell, which also costs 3,000 and the BFG itself 40,000 before the store's price multiplier) |
+| SURVIVAL | +10 starting health (up to 20 times, the price rises 50% each time), +25 starting armor (up to 4 times) |
 | ITEMS | consumables kept in stock (up to 9 each) and used in a run with a key: **Z** Berserk (+100 health, double damage 60s), **X** Invulnerability (30s), **C** Radiation suit (60s), **V** Medkit (+25), **B** Armor vest (+50), **N** Ammo pack (refills the weapon in your hands) |
 
 A consumable is only used up when it would do something (not when health is full, the power-up is still running, or the weapon needs no ammo). Prices and items are
@@ -150,7 +156,7 @@ forgets it; points and purchases are saved separately). Keycards used to be sold
 
 **Run history.** Every run, whether you die or win, is recorded (result, time, kills, score, and the health and weapons you started with)
 and the end screen shows your last four runs as bars with the best score starred, plus totals and your fastest win. Press `H` on the end screen for
-the full history (the last 16 runs, side by side). Runs played with cheat flags are marked `(cheats)` and never count as a best. The last 200 runs are kept.
+the full history (the last 16 runs, side by side). Runs played with cheat flags are marked `(cheats)` and never count as a best. The last 200 runs are kept. ARENA runs also record `rd` (the difficulty of that room), `he` (health left at the end), `st` (how much the difficulty changed afterwards), `pt` (points banked) and `bu` (upgrades bought so far), so the pace numbers can be tuned from the log.
 Everything is saved in `doom_progress.txt` (plain JSON text) so it survives closing the script; the web page version keeps it only while the page is open.
 Your points, purchases and weapon unlocks are saved there too. `run doom.js --reset` wipes it all: points, purchases, deaths and history. Pickups still work if you want them in a map: `a n o p` (ammo), `h` (health), `r` (armor), `b e w` (keys) and `2`-`7` (weapons) in `map.txt` as before.
 
