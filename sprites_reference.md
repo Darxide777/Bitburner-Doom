@@ -416,7 +416,7 @@ type also needs its entry in `ENEMIES` in `doom.js`, and one with a projectile n
 
 | Key | Animation | Frame | Size (px) / note |
 |---|---|---|---|
-| `Armor_idle1` | idle | 1 | 33x37 |
+| `Armor_idle1` | idle | 1 | 33x18 |
 
 ### BFG9000  (1 sprites)
 

@@ -247,7 +247,7 @@ const TUNING = {
   powerTicks: { invuln: 750, radsuit: 1500, berserk: 1500 },
   freezeGraceTicks: 50,
   spawnWarningTicks: 14,   // about half a second
-  itemGrowth: 4,   // decorations, pickups, projectiles and effects grow as you approach, up to this many times their picture size
+  itemGrowth: 20,   // pickups, projectiles and effects grow as you approach, up to this many times their picture size. High on purpose: a low cap (it was 4) made big things such as the scale-3 explosions stop growing about 4 tiles away while the walls kept growing, so they looked smaller up close
   rangedReachView: true,   // ranged attacks and hitscan shots reach the whole view distance (see above)
   useRange: 2.0,   // how far ahead (tiles) F can reach a door or secret wall
   doomUrl: 'https://archive.org/embed/DoomsharewareEpisode',   // the Internet Archive's playable shareware DOS DOOM (use: 'doom'); its details page is the "open in a tab" link
@@ -751,7 +751,7 @@ const ENEMIES = {
   BARREL: {
     mapChar: '0', hp: 3, prop: true, points: 0, killMsg: '',
     speed: 0, sight: 0, roam: 0, hitbox: 0.4, radius: 0.35, painChance: 0,
-    anim: { walk: 300 }, render: { near: 5, fall: 0, corpse: false },   // a prop: keeps the old size (full size within 5 tiles)
+    anim: { walk: 300 }, render: { zoom: 3.8, fall: 0, corpse: false },   // a prop: same zoom as the zombie (picture 32 px tall vs 55), so it scales like everything else
     blob: { tag: '\x15', chars: 'O0o.', size: 0.4 },
     sounds: {},
     attacks: [],
@@ -882,7 +882,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '73';
+  const VERSION = '74';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
