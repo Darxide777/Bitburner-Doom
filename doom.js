@@ -231,7 +231,8 @@ const DEFAULT_DIFFICULTY = 'normal';
 //   rangedReachView                true: ranged enemy attacks (and your pistol/shotgun/chaingun shots) reach as far as you can see (VIEW_DIST, up to 32
 //                                  tiles), so if you can see each other both sides can shoot. false: use each attack's own range max.
 //   useRange                       how far ahead (tiles) F can open a door or push a secret wall (it also tries a little to each side)
-//   terminalUrl / terminalRange    the page a TERMINAL decoration opens (see DECORATIONS `use`) and how close (tiles) you must stand
+//   terminalUrl / doomUrl / terminalRange   the pages the `use: 'terminal'` (the Bitburner cabinet: web Bitburner) and `use: 'doom'` (the DOOM cabinet:
+//                                  shareware DOS DOOM on the Internet Archive) decorations open (see DECORATIONS `use`), and how close (tiles) you must stand
 //   spawnWarningTicks              how long the fire-spike warning shows before a spawner's (Pain Elemental, Arch-vile) enemy appears
 //   freezeGraceTicks               after a freeze (PROJECTILES `freeze`) wears off you cannot be frozen again for this long
 //   maxEnemies                     spawners (Pain Elemental, Arch-vile) stop spawning while this many enemies are alive
@@ -249,6 +250,7 @@ const TUNING = {
   itemGrowth: 4,   // decorations, pickups, projectiles and effects grow as you approach, up to this many times their picture size
   rangedReachView: true,   // ranged attacks and hitscan shots reach the whole view distance (see above)
   useRange: 2.0,   // how far ahead (tiles) F can reach a door or secret wall
+  doomUrl: 'https://archive.org/embed/DoomsharewareEpisode',   // the Internet Archive's playable shareware DOS DOOM (use: 'doom'); its details page is the "open in a tab" link
   terminalUrl: 'https://bitburner-official.github.io/',   // web version of Bitburner, opened by the terminal in the level
   terminalRange: 1.8,
   berserkMultiplier: 2,
@@ -412,9 +414,10 @@ const PICKUPS = {
 //   anim     milliseconds per frame. Leave it out for a single still picture (frame 1 only). With it, every
 //            "<Type>_idle<N>" frame loops, and each placed copy starts at a different point so a row of torches
 //            doesn't flicker in step.
-//   use      what pressing F does when you stand close, facing it (within TUNING.terminalRange). Only 'terminal' exists:
-//            it opens TUNING.terminalUrl (the web version of Bitburner) in an overlay and pauses the game. A message
-//            tells you to press F when you are in range.
+//   use      what pressing F does when you stand close, facing it (within TUNING.terminalRange). 'terminal' opens
+//            TUNING.terminalUrl (the web version of Bitburner) in an overlay and pauses the game; 'doom' does the same with
+//            TUNING.doomUrl (the original DOS DOOM, shareware episode). 'soon' just shows
+//            OUT OF ORDER (the cabinet's game is not built yet). A message tells you to press F when you are in range.
 //   glyph / blob   ASCII stand-in used until art exists: glyph [tag, char] is one character on the floor, blob
 //            { tag, chars, size } is a small ASCII shape in the air (same format as PROJECTILES blob)
 // Art: "<Type>_idle1" in sprites.json (plus idle2, idle3 ... if it is animated, any number of frames), where Type is
@@ -431,8 +434,12 @@ const DECORATIONS = {
   TECHLAMP: { mapChar: 'U', solid: true, radius: 0.2, scale: 2.5, blob: { tag: '\x16', chars: 'O|:.', size: 0.25 } },   // Tech_Lamp_idle1
   STAKEDCORPSE: { mapChar: 'X', solid: true, radius: 0.2, scale: 2.5, blob: { tag: '\x0A', chars: '|#:.', size: 0.35 } },   // Staked_Corpse_idle1
   GOREPOLE: { mapChar: 'G', solid: true, radius: 0.2, scale: 2.5, blob: { tag: '\x18', chars: '@#:.', size: 0.35 } },   // Gore_Pole_idle1
-  // Usable: face it and press F (see `use` above). Animated art: Terminal_idle1..3 (ASCII computer until then)
-  TERMINAL: { mapChar: '1', solid: true, radius: 0.3, scale: 1.2, anim: 200, use: 'terminal', blob: { tag: '\x1D', chars: '#[=:.', size: 0.3 } },
+  // Arcade cabinets (usable: face one and press F, see `use` above). Art: "Arcade_<Name>_idle1", 85x170 pixels, so scale 0.32
+  // makes one about 0.6 of a wall tall (picture height x scale ~ 54 gives that at every distance). All three use the same flame cabinet
+  // body with their own sign and screen (sprites to convert/make_cab.py builds them).
+  ARCADEBITBURNER: { mapChar: '1', solid: true, radius: 0.4, scale: 0.32, use: 'terminal', blob: { tag: '\x1D', chars: '#[=:.', size: 0.3 } },   // opens the web Bitburner
+  ARCADEDOOM: { mapChar: 'A', solid: true, radius: 0.4, scale: 0.32, use: 'doom', blob: { tag: '\x16', chars: '#[=:.', size: 0.3 } },   // opens the original DOS DOOM
+  ARCADESOON: { mapChar: 'C', solid: true, radius: 0.4, scale: 0.32, use: 'soon', blob: { tag: '\x19', chars: '#[=:.', size: 0.3 } },   // placeholder: not built yet
   // Hanging from the ceiling (walk under them)
   HANGINGBODY1: { mapChar: 'H', solid: false, hang: true, scale: 2, blob: { tag: '\x18', chars: '|#:.', size: 0.3 } },   // Hanging_Body_1_idle1
   HANGINGBODY2: { mapChar: 'J', solid: false, hang: true, scale: 2, blob: { tag: '\x18', chars: '|#:.', size: 0.3 } },   // Hanging_Body_2_idle1
@@ -867,7 +874,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '65';
+  const VERSION = '67';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1291,29 +1298,30 @@ export async function main(ns) {
     if (p) pausedAt = Date.now(); else gameStartTime += Date.now() - pausedAt;
   }
   // ── TERMINAL OVERLAY ─────────────────────────────────────────────────────────────
-  // A decoration with use:'terminal' opens the web version of Bitburner (TUNING.terminalUrl) in an iframe laid over the
+  // A decoration with use:'terminal' (web Bitburner, TUNING.terminalUrl) or use:'doom' (DOS DOOM, TUNING.doomUrl) opens a web page in an iframe laid over the
   // whole page (appended to document.body: root has a transform, which would make a fixed child relative to it). The
   // game is paused while it is open and the pointer is released; the game ignores the keyboard (so typing in Bitburner
   // does not walk you around) except Escape, which closes it. The page may refuse to load inside a frame (the desktop
   // app can); the header therefore also has a plain link to open it in a browser tab. Esc inside the frame never reaches
   // the game, so the [X] button is the sure way out. terminalResume remembers whether to unpause on close.
   let terminalEl = null, terminalResume = false;
-  function openTerminal() {
+  // openTerminal(url, label, tabUrl): url is what the frame loads, label names it in the header, tabUrl is the plain link
+  // (defaults to url; the Internet Archive's embed address is not the page you want in a tab, its details page is).
+  function openTerminal(url = TUNING.terminalUrl, label = 'TERMINAL', tabUrl = url) {
     if (terminalEl) return;
     terminalResume = !paused;
     setPaused(true);
     for (const k in keys) keys[k] = false;
     try { doc.exitPointerLock?.(); } catch (e) { }
-    const url = TUNING.terminalUrl;
     terminalEl = doc.createElement('div');
     terminalEl.style.cssText = 'position:fixed;top:30px;left:5%;width:90%;height:calc(100% - 60px);z-index:100000;background:#000;' +
       'border:2px solid #0a0;box-shadow:0 0 40px #030;display:flex;flex-direction:column;font:bold 13px monospace;color:#0f0;';
     const bar = doc.createElement('div');
     bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-bottom:1px solid #0a0;';
     const title = doc.createElement('span');
-    title.textContent = 'TERMINAL: if the page below is blank, it was blocked, use the link  ->  ';
+    title.textContent = label + ': if the page below is blank, it was blocked, use the link  ->  ';
     const link = doc.createElement('a');
-    link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = '[open in a tab]';
+    link.href = tabUrl; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = '[open in a tab]';
     link.style.color = '#6f6';
     title.appendChild(link);
     const x = doc.createElement('span');
@@ -1948,7 +1956,13 @@ export async function main(ns) {
   }
   function tryUse() {
     const dec = usableDecorAhead();
-    if (dec) { if (DECORATIONS[dec.type].use === 'terminal') openTerminal(); return; }
+    if (dec) {
+      const use = DECORATIONS[dec.type].use;
+      if (use === 'terminal') openTerminal();
+      else if (use === 'doom') openTerminal(TUNING.doomUrl, 'DOOM (DOS shareware, Internet Archive)', TUNING.doomUrl.replace('/embed/', '/details/'));
+      else if (use === 'soon') flash('OUT OF ORDER - COMING SOON', 40);
+      return;
+    }
     const target = usableTileAhead();
     if (!target) return;
     const { fx, fy } = target;
@@ -3410,7 +3424,7 @@ export async function main(ns) {
     if (useKey && !prevUseKey && useCooldown <= 0) { tryUse(); useCooldown = 12; }
     prevUseKey = useKey;
     if (useCooldown > 0) useCooldown--;
-    if (flashTimer <= 0 && usableDecorAhead()) flash('PRESS F TO USE THE TERMINAL', 3);
+    if (flashTimer <= 0 && usableDecorAhead()) flash('PRESS F TO PLAY', 3);
     updateDoors();
     if (keys[' '] || keys['mouse0']) shoot();
     if (shootCooldown > 0) shootCooldown--;

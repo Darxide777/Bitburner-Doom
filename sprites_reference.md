@@ -131,25 +131,14 @@ impacts are spawned by the game when a shot hits a wall or the player; bullets h
 | BURNINGBARREL | `k` | `Burning_Barrel_idle1`..`_idle3` | done, 3 frames (animated, loops) |
 | REDTORCH | `T` | `Red_Torch_idle1`..`_idle4` | done, 4 frames (animated, loops) |
 | TECHLAMP | `U` | `Tech_Lamp_idle1` | done, 1 frame |
-| TERMINAL | `1` | `Terminal_idle1`..`_idle3` | done, 3 frames (animated, 200 ms per frame; F on it opens the web Bitburner) |
+| ARCADEBITBURNER | `1` | `Arcade_Bitburner_idle1` | done (F opens the web Bitburner) |
+| ARCADEDOOM | `A` | `Arcade_Doom_idle1` | done (F opens the DOS DOOM overlay) |
+| ARCADESOON | `C` | `Arcade_Soon_idle1` | done (placeholder: F says OUT OF ORDER) |
 | STAKEDCORPSE | `X` | `Staked_Corpse_idle1` | done, 1 frame |
 | GOREPOLE | `G` | `Gore_Pole_idle1` | done, 1 frame |
 | HANGINGBODY1 | `H` | `Hanging_Body_1_idle1` | done, 1 frame |
 | HANGINGBODY2 | `J` | `Hanging_Body_2_idle1` | done, 1 frame |
 | HANGINGBODY3 | `N` | `Hanging_Body_3_idle1` | done, 1 frame |
-
-### Walls, floor and sky (`FLATS` in `doom.js`)
-
-| Picture | Sprite name | Status |
-|---|---|---|
-| Walls | `Wall_idle1` | done: 128x128 tileable texture (Freedoom STARTAN1), used by every wall style; `Wall_Stone_idle1` / `Wall_Brick_idle1` / `Wall_Tech_idle1` override it per style |
-| Doors | `Door_idle1` | done: 128x128 (Freedoom BIGDOOR2); rises as the door opens; key doors are tinted with their key colour |
-| Ceiling | `Ceiling_idle1` | done: 64x64 tileable texture (Freedoom CEIL3_5), drawn with perspective like the floor; used instead of the sky |
-| Sky (ceiling) | `Sky_idle1` | done but unused while `Ceiling_idle1` exists (outdoor levels): 1024x256 panorama (Freedoom SKY3), wraps round as you turn, so it must tile sideways |
-| Floor | `Floor_idle1` | done: 64x64 tileable texture (Freedoom FLOOR4_8), one copy per map tile, fades to dark with distance |
-
-Any can be left out (a missing floor/ceiling is drawn dark, missing walls stay ASCII); with none, the ASCII look is used. The ceiling picture wins over the sky. Any size works for the sky;
-floor and ceiling are shrunk to 64x64 and walls/doors to 128x128 on load, so supply square tileable pictures. Nukage tiles are painted green by the game.
 
 ### Still to add
 
@@ -606,14 +595,6 @@ type also needs its entry in `ENEMIES` in `doom.js`, and one with a projectile n
 |---|---|---|---|
 | `Skull_Pile_idle1` | idle | 1 | 41x43 |
 
-### TERMINAL  (3 sprites)
-
-| Key | Animation | Frame | Size (px) / note |
-|---|---|---|---|
-| `Terminal_idle1` | idle | 1 | 30x27 |
-| `Terminal_idle2` | idle | 2 | 30x27 |
-| `Terminal_idle3` | idle | 3 | 30x28 |
-
 ### ZOMBIESERGEANT  (10 sprites)
 
 | Key | Animation | Frame | Size (px) / note |
@@ -843,4 +824,22 @@ type also needs its entry in `ENEMIES` in `doom.js`, and one with a projectile n
 | Key | Animation | Frame | Size (px) / note |
 |---|---|---|---|
 | `Door_idle1` | idle | 1 | 128x128 |
+
+### ARCADEBITBURNER  (1 sprites)
+
+| Key | Animation | Frame | Size (px) / note |
+|---|---|---|---|
+| `Arcade_Bitburner_idle1` | idle | 1 | 89x170 |
+
+### ARCADEDOOM  (1 sprites)
+
+| Key | Animation | Frame | Size (px) / note |
+|---|---|---|---|
+| `Arcade_Doom_idle1` | idle | 1 | 89x170 |
+
+### ARCADESOON  (1 sprites)
+
+| Key | Animation | Frame | Size (px) / note |
+|---|---|---|---|
+| `Arcade_Soon_idle1` | idle | 1 | 89x170 |
 <!-- SPRITES:END -->

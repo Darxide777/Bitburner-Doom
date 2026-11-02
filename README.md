@@ -129,20 +129,26 @@ Summoned enemies give no kills or points, and a spawner never has more than a fe
 | `X` | Staked corpse | yes |
 | `G` | Gore pole | yes |
 | `H` `J` `N` | Three different bodies hanging from the ceiling | no, you walk under them |
-| `1` | Terminal: face it and press F to open the web version of Bitburner over the game (see below) | yes |
+| `1` | Bitburner arcade cabinet: face it and press F to open the web version of Bitburner over the game (see below) | yes |
+| `A` | DOOM arcade cabinet: face it and press F to play the original DOS DOOM (shareware episode, from the Internet Archive) in an overlay | yes |
+| `C` | Coming-soon arcade cabinet: placeholder, F says OUT OF ORDER (its game is not built yet) | yes |
 
 To add your own, copy an entry in `DECORATIONS` in `doom.js` and give it an unused map character. Two options change how
 a decoration looks: `anim: 120` makes it animated (milliseconds per frame, any number of frames, and each copy on the map
 starts at a different point), and `hang: true` hangs it from the ceiling. Decorations stand on the floor by default (bottom edge on the floor line);
-`float: true` leaves one floating at eye level instead. `use: 'terminal'` makes a decoration usable with F.
+`float: true` leaves one floating at eye level instead. `use: 'terminal'` (opens Bitburner), `use: 'doom'` (opens DOS DOOM) or `use: 'soon'` (OUT OF ORDER) makes a decoration usable with F.
 
-**The terminal (`1`).** Stand close and face it (a message says PRESS F TO USE THE TERMINAL) and press F: the game pauses
+**The Bitburner cabinet (`1`).** Stand close and face it (a message says PRESS F TO PLAY) and press F: the game pauses
 and `https://bitburner-official.github.io/` (change it with `TUNING.terminalUrl`) opens in a frame over the page. The
 game ignores the keyboard while it is open, so you can type in Bitburner; close it with Esc or the [X] button
 (Esc typed inside the frame doesn't reach the game, so use the button then). If the page stays blank the site was
 blocked from loading in a frame (the desktop app can do that); the header has an [open in a tab] link for that case.
-The web version keeps its own save, separate from your Steam one. It has no picture yet, so it shows as an ASCII
-computer; add `Terminal_idle1`..`3` to `sprites.json` to give it art (animated, 200 ms per frame; change `anim` on the TERMINAL entry).
+The web version keeps its own save, separate from your Steam one. **The DOOM cabinet (`A`).** Same overlay as the Bitburner one, but it loads the Internet Archive's playable copy of the shareware episode
+of the original DOS DOOM (`TUNING.doomUrl`; the [open in a tab] link goes to its details page). The Archive runs it in an emulator inside
+the frame; click the frame once so it gets the keyboard. The game itself is not stored in this project, only the link. If the frame
+stays blank, use the tab link. All three cabinets are the same flame machine with a different sign and screen. They use `Arcade_Bitburner_idle1`,
+`Arcade_Doom_idle1` and `Arcade_Soon_idle1` (85x170 pixels each, `scale: 0.32` in `DECORATIONS`; picture height x scale
+should stay near 54 to keep them about 0.6 of a wall tall).
 
 The first level is `map.txt`. More levels are more map files listed in `LEVELS` near the top of `doom.js`; the exit of
 the last one ends the game. Enemies hunt you: they chase where they last saw or heard you, find a route around walls,
@@ -208,8 +214,8 @@ Use `sprites_reference.md` (every sprite name, the file format and naming rules)
 sprites without reading the whole file).
 
 Each decoration needs an image named `{Type}_idle1`: `Impaled_Body_idle1`, `Skull_Pile_idle1`, `Candelabra_idle1`,
-`Tech_Lamp_idle1`, `Staked_Corpse_idle1`, `Gore_Pole_idle1`, `Hanging_Body_1_idle1`, `Hanging_Body_2_idle1`, `Hanging_Body_3_idle1`.
-The animated ones (`anim` set) use as many frames as you give them, looped: `Burning_Barrel_idle1`..`3`, `Red_Torch_idle1`..`4`, `Terminal_idle1`..`3`.
+`Tech_Lamp_idle1`, `Staked_Corpse_idle1`, `Gore_Pole_idle1`, `Arcade_Bitburner_idle1`, `Arcade_Doom_idle1`, `Arcade_Soon_idle1`, `Hanging_Body_1_idle1`, `Hanging_Body_2_idle1`, `Hanging_Body_3_idle1`.
+The animated ones (`anim` set) use as many frames as you give them, looped: `Burning_Barrel_idle1`..`3`, `Red_Torch_idle1`..`4`, 
 
 The exploding barrel uses `Barrel_idle1`... (looped while it stands) and `Barrel_death1`... (the explosion frames).
 
