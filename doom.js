@@ -965,6 +965,9 @@ export async function main(ns) {
   }
   const MAX_RUNS = 200;
   const CHEATING = INFINITE_HEALTH || INFINITE_AMMO || ALL_WEAPONS;
+  // Bitburner kills a script that calls ANY ns function while its main loop is waiting in ns.sleep ("concurrent calls"), which is exactly where
+  // key and click handlers run. So handlers (store purchases, using an item) only set saveDirty, and the frame loop writes the file between its sleeps.
+  let saveDirty = false;
   const saveProgress = () => { try { ns.write(PROGRESS_FILE, JSON.stringify({ deaths, points, buys, inv, runs: runs.slice(-MAX_RUNS) }), 'w'); } catch (e) { } };
   if (flags.reset) saveProgress();
   // Adds the run that just ended (result 'DIED' or 'WON') to the history and saves it. Call once, after endTime and score are final.
@@ -984,7 +987,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '94';
+  const VERSION = '96';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1306,7 +1309,7 @@ export async function main(ns) {
   const closeBtn = doc.createElement('span');
   closeBtn.textContent = '[ESC]';
   closeBtn.style.cursor = 'pointer';
-  closeBtn.addEventListener('click', () => running = false);
+  closeBtn.addEventListener('click', () => { exitReason = 'the [ESC] button was clicked'; running = false; });
   titleBar.appendChild(closeBtn);
   root.appendChild(titleBar);
 
@@ -1393,6 +1396,7 @@ export async function main(ns) {
   // Everything else (movement, shooting, F to use) is polled from `keys` once per tick in updateGame(), and the
   // title loop polls Enter/Space the same way. BLOCKED_KEYS get preventDefault so the browser/game UI doesn't react.
   const win = eval('window');
+  let exitReason = '';   // why the game is ending, printed by cleanup()
   const keys = {};
   // Letters are normalised to lowercase so Shift/CapsLock can't leave a key "stuck" down.
   const normKey = k => (k.length === 1 ? k.toLowerCase() : k);
@@ -1489,7 +1493,7 @@ export async function main(ns) {
     if (!pickupUseful(def)) { flash(`NO NEED FOR ${item.name}`, 20); return; }
     inv[item.id]--;
     collectPickup(def);
-    saveProgress();
+    saveDirty = true;
   }
 
   // ── STORE OVERLAY ────────────────────────────────────────────────────────────
@@ -1519,10 +1523,14 @@ export async function main(ns) {
     if (item.health) health += item.health;
     if (item.armor) armor += item.armor;
     if (item.key) heldKeys.add(item.key);
-    saveProgress();
+    saveDirty = true;   // (never call ns.* from a key/click handler, see saveDirty)
     play(SOUNDS.weaponPickup, 0.8);
     storeMsg = `BOUGHT ${itemName(item)}`;
     updateHud();
+  }
+  // buyItem with its errors caught: a failure is shown in the store and printed instead of ending the game
+  function safeBuy(item) {
+    try { buyItem(item); } catch (e) { storeMsg = `ERROR: ${e.message}`; }
   }
   function renderStore() {
     if (!storeEl) return;
@@ -1550,7 +1558,7 @@ export async function main(ns) {
     else if (k === 'ArrowLeft' || k === 'a') { storeTab = (storeTab + STORE_CATS.length - 1) % STORE_CATS.length; storeSel = 0; storeMsg = ''; }
     else if (k === 'ArrowDown' || k === 's') { storeSel = Math.min(items.length - 1, storeSel + 1); storeMsg = ''; }
     else if (k === 'ArrowUp' || k === 'w') { storeSel = Math.max(0, storeSel - 1); storeMsg = ''; }
-    else if (k === 'Enter' || k === ' ' || k === 'b') { if (items[storeSel]) buyItem(items[storeSel]); }
+    else if (k === 'Enter' || k === ' ' || k === 'b') { if (items[storeSel]) safeBuy(items[storeSel]); }
     renderStore();
   }
   function openStore() {
@@ -1568,7 +1576,7 @@ export async function main(ns) {
       const items = storeItems();
       if (t.dataset.close) return closeStore();
       if (t.dataset.tab !== undefined) { storeTab = +t.dataset.tab; storeSel = 0; storeMsg = ''; }
-      else if (t.dataset.buy !== undefined) { storeSel = +t.dataset.buy; if (items[storeSel]) buyItem(items[storeSel]); }
+      else if (t.dataset.buy !== undefined) { storeSel = +t.dataset.buy; if (items[storeSel]) safeBuy(items[storeSel]); }
       else storeSel = +t.dataset.row;
       renderStore();
     });
@@ -1596,7 +1604,7 @@ export async function main(ns) {
     if (e.type === 'keydown') {
       keys[k] = true;
       if (!e.repeat && inGame && !gameOver && !won && !paused) { const it = STORE.find(i => i.hotkey === k); if (it) useItem(it); }   // consumables (see STORE)
-      if (k === 'Escape') running = false;
+      if (k === 'Escape') { exitReason = 'Esc was pressed'; running = false; }
       if (k === 'p' && !e.repeat && inGame && !gameOver && !won) { if (automapOpen) closeAutomap(); else setPaused(!paused); }
       if (k === 'm' && !e.repeat && inGame && !gameOver && !won) toggleAutomap();
       if (k === 'Tab' && !e.repeat) showMap = !showMap;
@@ -1636,6 +1644,8 @@ export async function main(ns) {
   function cleanup() {
     if (cleanedUp) return;
     cleanedUp = true;
+    if (!exitReason) exitReason = 'stopped from outside (killed, or the script was restarted)';
+    if (exitReason.startsWith('stopped')) try { ns.tprint(`doom.js exited: ${exitReason}`); } catch (e) { }   // say why when it was not you, so a surprise exit is never silent
     running = false;
     try { musicSrc?.stop(); } catch (e) { }
     try { audioCtx.close(); } catch (e) { }
@@ -3999,6 +4009,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     let last = Date.now(), acc = 0, prevEnter = false, prevH = false;
     while (running) {
       const frameStart = Date.now();
+      if (saveDirty) { saveDirty = false; saveProgress(); }   // purchases / used items made by handlers since the last frame
       acc = Math.min(acc + (frameStart - last), STEP_MS * MAX_STEPS_PER_FRAME);
       last = frameStart;
 
@@ -4034,6 +4045,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   } catch (e) {
     ns.tprint(`ERROR: ${e.message}\n${e.stack ?? ''}`);
   } finally {
+    if (saveDirty) saveProgress();
     cleanup();
   }
 }
