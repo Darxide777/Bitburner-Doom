@@ -56,6 +56,7 @@ On the title screen use **Left/Right** to pick the difficulty (easy, normal, har
 | Z X C V B N | Use a consumable from your stock: **Z** Berserk, **X** Invulnerability, **C** Radiation suit, **V** Medkit, **B** Armor vest, **N** Ammo pack (the HUD hint line lists the ones you have) |
 | Tab | Toggle the minimap |
 | F3 | Show / hide the live performance line (fps, work per frame, enemies, projectiles) |
+| F4 | Cheats only (godmode / infinite ammo / all weapons): kill every enemy at once and cancel announced spawns, so a benchmark round can be finished |
 | M | Full-screen automap with fog of war (pauses the game; M or P closes it) |
 | P | Pause / resume (the game also pauses by itself when the window loses focus) |
 | Mouse | Turn (click the game once to capture the mouse); left click shoots |
@@ -112,6 +113,7 @@ Every run on any level is measured while you play and logged when it ends (death
   dropped simulation time, peaks of enemies / projectiles / effects / DOM sprites / JS heap, the first second with a slowdown (fps 15% under the first seconds' fps, or work over 75% of the budget) and how many enemies were alive then. A healthy run sits near 21.5 fps rather than 25, because Bitburner's `ns.sleep` adds a few ms per frame; a stall of a second or more (for example Bitburner's autosave) is left out of the timeline, so a missing second means a freeze, and a per-second timeline
   `[second, fps, avg work, max work, avg update, avg render, enemies, projectiles, effects, DOM sprites, heap MB]`). Read it with `cat doom_bench.txt` in the terminal or copy it out of the game's
   file editor. `--reset` does not clear it. Cheat-flag runs are marked.
+- **Snapshots:** every 30 seconds of play a shorter line with `"r":"SNAP"` (the last 30 seconds of the timeline) is appended too, so a crash or freeze still leaves data up to that point. The normal full line is written when the run ends.
 - **F3** shows a live line (fps, work ms, enemies, projectiles) in the HUD in place of the position.
 
 ## HANGAR (E1M1)

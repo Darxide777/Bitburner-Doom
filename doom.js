@@ -1010,7 +1010,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '107';
+  const VERSION = '108';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1424,7 +1424,7 @@ export async function main(ns) {
   // Letters are normalised to lowercase so Shift/CapsLock can't leave a key "stuck" down.
   const normKey = k => (k.length === 1 ? k.toLowerCase() : k);
   const BLOCKED_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ',
-    'w', 'a', 's', 'd', 'q', 'e', 'f', 'p', 'm', 'Tab', 'Escape', 'F3', ...Object.keys(WEAPON_KEYS), ...STORE.filter(i => i.hotkey).map(i => i.hotkey)]);
+    'w', 'a', 's', 'd', 'q', 'e', 'f', 'p', 'm', 'Tab', 'Escape', 'F3', 'F4', ...Object.keys(WEAPON_KEYS), ...STORE.filter(i => i.hotkey).map(i => i.hotkey)]);
   // Pause: P toggles it, and losing window focus turns it on (so enemies can't kill you while you are in another
   // tab). Only meaningful during play (inGame, set by the frame loop). While paused the frame loop skips updateGame
   // and just redraws with a PAUSED message; the elapsed pause time is added to gameStartTime so the clock ignores it.
@@ -1632,6 +1632,7 @@ export async function main(ns) {
       if (k === 'p' && !e.repeat && inGame && !gameOver && !won) { if (automapOpen) closeAutomap(); else setPaused(!paused); }
       if (k === 'm' && !e.repeat && inGame && !gameOver && !won) toggleAutomap();
       if (k === 'Tab' && !e.repeat) showMap = !showMap;
+      if (k === 'F4' && !e.repeat && CHEATING) killAllReq = true;   // cheats only: kill every enemy (done in the frame loop; see KILL ALL)
       if (k === 'F3' && !e.repeat) perfOn = !perfOn;   // live performance line (see PERFORMANCE LOG)
       if (WEAPON_KEYS[k] && !e.repeat) switchWeapon(WEAPON_KEYS[k]);
       if (BLOCKED_KEYS.has(k)) e.preventDefault();
@@ -4119,6 +4120,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   const BENCH_FILE = 'doom_bench.txt';
   const nowMs = () => (win.performance && win.performance.now ? win.performance.now() : Date.now());
   const PERF_MAX = 20000;       // frame times kept for the percentiles (about 13 minutes of play); the sums and maxima keep counting after that
+  let killAllReq = false;   // set by F4 when a cheat is on
   let perf = null, perfOn = false, perfLive = '', perfLine = '';
   function resetPerf() {
     perf = { frames: 0, n: 0, work: new Float32Array(PERF_MAX), active: 0, wSum: 0, wMax: 0, uSum: 0, uMax: 0, rSum: 0, rMax: 0, slow: 0, drop: 0,
@@ -4148,6 +4150,13 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       if (!p.firstSlow && p.sec.length > 3 && (fps < 0.85 * p.baseFps || avgW > 0.75 * TARGET_FRAME_MS)) p.firstSlow = [Math.round(p.active / 1000), en];
       perfLive = `FPS ${r1(fps)}  WORK ${r1(avgW)}ms  EN ${en}  PR ${projectiles.length}`;
       p.b = { f: 0, act: 0, w: 0, wMax: 0, u: 0, r: 0 };
+      // Every 30 seconds of play, append a snapshot line (r: 'SNAP', the last 30 seconds of the timeline) so a crash or a freeze still leaves data up to that point.
+      // (This runs in the frame loop, never in a key handler, so the ns.write is safe.)
+      if (p.sec.length % 30 === 0) {
+        const snap = { v: VERSION, lv: LEVELS[levelIndex].name.split(':')[0], round: LEVELS[levelIndex].arena ? runRound + 1 : undefined, r: 'SNAP', secs: Math.round(p.active / 1000), kills,
+          fps: r1(p.frames * 1000 / Math.max(1, p.active)), peak: p.pk, firstSlow: p.firstSlow, cheats: CHEATING || undefined, sec: p.sec.slice(-30) };
+        try { ns.write(BENCH_FILE, JSON.stringify(snap) + '\n', 'a'); } catch (e) { }
+      }
     }
   }
   // Called once when a run ends (and by the finally block for a run you quit): builds the summary, appends it to BENCH_FILE, prints it, and sets perfLine for the end screen.
@@ -4194,6 +4203,14 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
         if (automapOpen) flashTimer = 0; else flash('PAUSED  -  PRESS P', 2);   // the map has its own title
         renderFrame();
       } else if (!gameOver && !won) {
+        // KILL ALL (F4, only with a cheat on): every living enemy dies through hitEnemy (so kills, summoner shields and the arena clear check all work) and announced spawns are cancelled.
+        // It exists so a godmode benchmark can finish a round.
+        if (killAllReq) {
+          killAllReq = false; pendingSpawns.length = 0;
+          for (const e of enemies) if (e.alive && !e.def.prop) e.kidKills = 1e9;   // drop every summoner's shield first
+          for (const e of enemies) if (e.alive && !e.def.prop) hitEnemy(e, 1e9, e.x, e.y, false);
+          flash('KILL ALL', 30);
+        }
         // Catch the simulation up to real time, then draw once
         while (acc >= STEP_MS && !gameOver && !won) { updateGame(); acc -= STEP_MS; }
         const t1 = nowMs();
