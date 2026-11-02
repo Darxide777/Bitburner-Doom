@@ -227,7 +227,7 @@ const DEFAULT_DIFFICULTY = 'normal';
 //   painTicks                      how long an enemy flinches (no moving or attacking) after a pain roll
 //   hazard                         damage taken every `interval` ticks while standing in nukage
 //   powerTicks                     duration of each timed power-up (see POWERUPS in PICKUPS)
-//   itemGrowth                     how many times bigger than its picture a non-enemy sprite (terminal, torch, pickup, fireball, explosion) gets as you come close
+//   itemGrowth                     how many times bigger than its picture a non-enemy sprite (pickup, fireball, explosion; decorations such as torches and the arcade cabinets are not capped) gets as you come close
 //   rangedReachView                true: ranged enemy attacks (and your pistol/shotgun/chaingun shots) reach as far as you can see (VIEW_DIST, up to 32
 //                                  tiles), so if you can see each other both sides can shoot. false: use each attack's own range max.
 //   useRange                       how far ahead (tiles) F can open a door or push a secret wall (it also tries a little to each side)
@@ -423,17 +423,20 @@ const PICKUPS = {
 // Art: "<Type>_idle1" in sprites.json (plus idle2, idle3 ... if it is animated, any number of frames), where Type is
 // the key below with underscores removed and upper-cased, e.g. IMPALEDBODY <- "Impaled_Body_idle1". To add one,
 // copy an entry.
+// Sizes: a decoration's height is picture height x scale x 5 / 449 of a wall's height, at every distance. Targets used now:
+// torches and lamps 0.9, impaled body / staked corpse / gore pole 1.0, hanging bodies 0.7-0.8, candelabra 0.7, burning barrel 0.5,
+// skull pile 0.35, arcade cabinets 0.6. To resize one: scale = target x 449 / (picture height in pixels x 5).
 const DECORATIONS = {
-  IMPALEDBODY: { mapChar: 't', solid: true, scale: 3, blob: { tag: '\x18', chars: '|#:.', size: 0.35 } },
-  SKULLPILE: { mapChar: 'j', solid: true, scale: 1.5, blob: { tag: '\x14', chars: '@o.', size: 0.45 } },
-  CANDELABRA: { mapChar: 'u', solid: true, scale: 2, blob: { tag: '\x19', chars: 'Y!i.', size: 0.25 } },
+  IMPALEDBODY: { mapChar: 't', solid: true, scale: 1.36, blob: { tag: '\x18', chars: '|#:.', size: 0.35 } },
+  SKULLPILE: { mapChar: 'j', solid: true, scale: 0.73, blob: { tag: '\x14', chars: '@o.', size: 0.45 } },
+  CANDELABRA: { mapChar: 'u', solid: true, scale: 1.03, blob: { tag: '\x19', chars: 'Y!i.', size: 0.25 } },
   // Animated (flames): frames loop at `anim` ms each
-  BURNINGBARREL: { mapChar: 'k', solid: true, scale: 1, anim: 120, blob: { tag: '\x19', chars: 'W^*.', size: 0.35 } },   // Burning_Barrel_idle1..3
-  REDTORCH: { mapChar: 'T', solid: true, radius: 0.2, scale: 2.5, anim: 120, blob: { tag: '\x18', chars: 'Y!i.', size: 0.25 } },   // Red_Torch_idle1..4
+  BURNINGBARREL: { mapChar: 'k', solid: true, scale: 0.88, anim: 120, blob: { tag: '\x19', chars: 'W^*.', size: 0.35 } },   // Burning_Barrel_idle1..3
+  REDTORCH: { mapChar: 'T', solid: true, radius: 0.2, scale: 0.96, anim: 120, blob: { tag: '\x18', chars: 'Y!i.', size: 0.25 } },   // Red_Torch_idle1..4
   // Still pictures
-  TECHLAMP: { mapChar: 'U', solid: true, radius: 0.2, scale: 2.5, blob: { tag: '\x16', chars: 'O|:.', size: 0.25 } },   // Tech_Lamp_idle1
-  STAKEDCORPSE: { mapChar: 'X', solid: true, radius: 0.2, scale: 2.5, blob: { tag: '\x0A', chars: '|#:.', size: 0.35 } },   // Staked_Corpse_idle1
-  GOREPOLE: { mapChar: 'G', solid: true, radius: 0.2, scale: 2.5, blob: { tag: '\x18', chars: '@#:.', size: 0.35 } },   // Gore_Pole_idle1
+  TECHLAMP: { mapChar: 'U', solid: true, radius: 0.2, scale: 1.01, blob: { tag: '\x16', chars: 'O|:.', size: 0.25 } },   // Tech_Lamp_idle1
+  STAKEDCORPSE: { mapChar: 'X', solid: true, radius: 0.2, scale: 1.34, blob: { tag: '\x0A', chars: '|#:.', size: 0.35 } },   // Staked_Corpse_idle1
+  GOREPOLE: { mapChar: 'G', solid: true, radius: 0.2, scale: 1.36, blob: { tag: '\x18', chars: '@#:.', size: 0.35 } },   // Gore_Pole_idle1
   // Arcade cabinets (usable: face one and press F, see `use` above). Art: "Arcade_<Name>_idle1", 85x170 pixels, so scale 0.32
   // makes one about 0.6 of a wall tall (picture height x scale ~ 54 gives that at every distance). All three use the same flame cabinet
   // body with their own sign and screen (sprites to convert/make_cab.py builds them).
@@ -441,9 +444,9 @@ const DECORATIONS = {
   ARCADEDOOM: { mapChar: 'A', solid: true, radius: 0.4, scale: 0.32, use: 'doom', blob: { tag: '\x16', chars: '#[=:.', size: 0.3 } },   // opens the original DOS DOOM
   ARCADESOON: { mapChar: 'C', solid: true, radius: 0.4, scale: 0.32, use: 'soon', blob: { tag: '\x19', chars: '#[=:.', size: 0.3 } },   // placeholder: not built yet
   // Hanging from the ceiling (walk under them)
-  HANGINGBODY1: { mapChar: 'H', solid: false, hang: true, scale: 2, blob: { tag: '\x18', chars: '|#:.', size: 0.3 } },   // Hanging_Body_1_idle1
-  HANGINGBODY2: { mapChar: 'J', solid: false, hang: true, scale: 2, blob: { tag: '\x18', chars: '|#:.', size: 0.3 } },   // Hanging_Body_2_idle1
-  HANGINGBODY3: { mapChar: 'N', solid: false, hang: true, scale: 2, blob: { tag: '\x18', chars: '|#:.', size: 0.3 } },   // Hanging_Body_3_idle1
+  HANGINGBODY1: { mapChar: 'H', solid: false, hang: true, scale: 0.92, blob: { tag: '\x18', chars: '|#:.', size: 0.3 } },   // Hanging_Body_1_idle1
+  HANGINGBODY2: { mapChar: 'J', solid: false, hang: true, scale: 0.86, blob: { tag: '\x18', chars: '|#:.', size: 0.3 } },   // Hanging_Body_2_idle1
+  HANGINGBODY3: { mapChar: 'N', solid: false, hang: true, scale: 0.84, blob: { tag: '\x18', chars: '|#:.', size: 0.3 } },   // Hanging_Body_3_idle1
 };
 
 // ─── PROJECTILES ────────────────────────────────────────────────────────────
@@ -467,7 +470,9 @@ const DECORATIONS = {
 const HIT_BLOB = { tag: '\x15', chars: '*+.', size: 0.5 };
 const PROJECTILES = {
   fireball: { speed: 0.15, damage: 4, sprite: 'IMP' },
-  pellet: { speed: 0.16, damage: 2, blob: { tag: '\x17', chars: '*.', size: 0.15 } },
+  // Bullets (pellet) are light grey (tag \x05) for every shooter: zombies, sergeants, the Spider Mastermind, the tank's machine gun.
+  // They used the yellow ammo-pickup colour before. Keep any new bullet-like projectile on the same tag.
+  pellet: { speed: 0.16, damage: 2, blob: { tag: '\x05', chars: '*.', size: 0.15 } },
   cacofireball: { speed: 0.12, damage: 6, sprite: 'CACODEMON' },
   skull: { speed: 0.18, damage: 1, sprite: 'LOSTSOUL' },
   // Projectiles of the newer enemies: `sprite` names the art type to use once "<Type>_projectile" exists in
@@ -528,7 +533,9 @@ const PROJECTILES = {
 //                       by the Spawn_Warning art (see trySpawn). Spawned enemies are awake and hunting, and do not count as kills
 //                       or give points (kills are out of the enemies that were placed in the map).
 //               melee:  damage, label, bypassArmor, ignoreCritical
-//  onDeath    { explode: { radius, damage, label, sound, hurtsEnemies, falloff, blob } }  an explosion when it dies.
+//  onDeath    { explode: { radius, damage, label, sound, hurtsEnemies, falloff, blob, art, scale, after } }  an explosion when it dies.
+//             art: 'TANKEXPLOSION' plays that picture ("<Art>_idle1..N", scale = its size) at the spot; after: 'die' makes it wait until
+//             the enemy's own death frames have played (the barrel: its explosion first, then the tank-style one)
 //             By default it hurts only the player, with the full damage anywhere inside radius (Lost Soul).
 //             hurtsEnemies: true also damages every living enemy (and barrel) in radius, so explosions chain.
 //             falloff: true = damage fades linearly to 0 at the edge and needs line of sight (walls shelter you).
@@ -749,6 +756,7 @@ const ENEMIES = {
     sounds: {},
     attacks: [],
     onDeath: { explode: { radius: 3, damage: 40, label: 'BARREL EXPLOSION!', sound: 'barrelexplode', hurtsEnemies: true, falloff: true,
+      art: 'TANKEXPLOSION', scale: 3, after: 'die',   // the tanks' explosion plays once the barrel's own explosion frames have finished
       blob: { tag: '\x1B', chars: '@*+.', size: 2.5, ttl: 8 } } },
     spawnable: false,
   },
@@ -874,7 +882,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '67';
+  const VERSION = '73';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1744,7 +1752,17 @@ export async function main(ns) {
     let sideY = (dy < 0 ? ey - mapY : mapY + 1 - ey) * deltaY;
     for (let i = 0; i < 128; i++) {
       let t;
-      if (sideX < sideY) { t = sideX; sideX += deltaX; mapX += stepX; }
+      // Corner squeeze: a ray that passes EXACTLY through a grid corner (common between cell centres on a 45 degree line) goes
+      // from one cell to the diagonal one without touching the two cells beside the corner. Those two decide it: if both are
+      // solid (a diagonal wall) the ray is blocked, otherwise it passes. (Without this, sight and shots leaked through
+      // diagonal walls, or were blocked by a cell the ray never entered, depending on which way a tie broke.)
+      if (Math.abs(sideX - sideY) < 1e-9) {
+        t = sideX;
+        if (t >= dist) return true;
+        if (solidAt(mapX + stepX + 0.5, mapY + 0.5) && solidAt(mapX + 0.5, mapY + stepY + 0.5)) return false;
+        sideX += deltaX; sideY += deltaY; mapX += stepX; mapY += stepY;
+      }
+      else if (sideX < sideY) { t = sideX; sideX += deltaX; mapX += stepX; }
       else { t = sideY; sideY += deltaY; mapY += stepY; }
       if (t >= dist) return true;                       // reached the target tile
       if (solidAt(mapX + 0.5, mapY + 0.5)) return false;
@@ -1760,7 +1778,8 @@ export async function main(ns) {
   //   * the OUTLINE: `outline[idx]` marks the wall tiles on the outer boundary of the level (computed once per level
   //     by buildAutomapBase), so the overall shape is always visible but the rooms inside it are not;
   //   * the exit tile (always marked, so the player knows where to head);
-  //   * pickups that are still lying around (except secret-room rewards until that spot is explored).
+  //   * ammo, health and key pickups that are still lying around (except secret-room rewards until that spot is explored).
+  //     Weapons, armor and power-ups are not marked (autoMapShows decides; a level can hold hundreds of items).
   // Enemies are never shown. Both arrays are REASSIGNED by parseMap() through buildAutomapBase(), so never keep a
   // reference to them. The map is drawn by renderAutomap(), which overwrites the whole ASCII grid at the end of
   // renderFrame(); if the level is too big for the screen it is shrunk by whole-tile blocks (see sx / sy in renderAutomap).
@@ -1878,10 +1897,13 @@ export async function main(ns) {
       else if (kind === TILE.HAZARD) put(x, y, 50, '\x10~');
       else put(x, y, 30, '·');
     }
+    // Only what helps you navigate: keycards (drawn over everything else), ammo and health. Weapons (def.weapon), armor and
+    // power-ups (def.power, which includes the berserk pack's health) are left off, otherwise the map fills with letters.
+    const autoMapShows = def => !!def.give?.key || (!def.weapon && !def.power && !!(def.give?.ammo || def.give?.health));
     for (const it of pickups) {
       const def = PICKUPS[it.type];
       const tx = Math.floor(it.x), ty = Math.floor(it.y);
-      if (it.alive && def && (!it.secret || explored[ty * MW + tx])) put(tx, ty, 80, def.glyph[0] + def.glyph[1]);
+      if (it.alive && def && autoMapShows(def) && (!it.secret || explored[ty * MW + tx])) put(tx, ty, def.give?.key ? 85 : 80, def.glyph[0] + def.glyph[1]);
     }
     const angleNorm = ((pa % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
     put(Math.floor(px), Math.floor(py), 100, '\x0A' + ['►', '▼', '◄', '▲'][Math.floor((angleNorm + Math.PI / 4) / (Math.PI / 2)) % 4]);
@@ -2464,7 +2486,7 @@ export async function main(ns) {
       const def = DECORATIONS[d.type];
       // def.anim = ms per frame -> loop the idle frames (offset desynchronises copies); otherwise show frame 1 only
       addSprite(d.x, d.y, { type: d.type, anim: 'idle', step: def.anim ? undefined : 0, ms: def.anim, offset: d.phase, scale: def.scale ?? 1,
-        glyph: def.glyph, blob: def.blob, hang: !!def.hang, ground: !def.hang && !def.float });
+        glyph: def.glyph, blob: def.blob, hang: !!def.hang, ground: !def.hang && !def.float, uncapped: true });
     }
     for (const p of projectiles) {
       if (!p.alive) continue;
@@ -2476,7 +2498,7 @@ export async function main(ns) {
     // the last one (thrown gun parts). fx.ground stands the picture on the floor; fx.scale sizes it.
     const fxStep = fx => fx.tumble ? ((fx.vx || fx.vy) ? Math.floor(fx.age / 3) % fx.n : fx.n - 1)
       : fx.n ? Math.min(fx.n - 1, Math.floor(fx.age / fx.tpf)) : fx.cycle ? Math.floor(fx.ttl / 3) % fx.cycle : 0;
-    for (const fx of effects) addSprite(fx.x, fx.y, { type: fx.sprite, anim: fx.anim, step: fxStep(fx), scale: fx.scale ?? 1, ground: !!fx.ground, blob: fx.blob });
+    for (const fx of effects) if (!(fx.wait > 0)) addSprite(fx.x, fx.y, { type: fx.sprite, anim: fx.anim, step: fxStep(fx), scale: fx.scale ?? 1, ground: !!fx.ground, blob: fx.blob });
     sprites.sort((a, b) => b.s.dist - a.s.dist);
 
     // ── PNG Sprites ───────────────────────────────────────────────────────────
@@ -2489,7 +2511,7 @@ export async function main(ns) {
     const charWidth = renderContainer.clientWidth / W;
     const charHeight = renderContainer.clientHeight / H;
 
-    for (const { s, type, anim, ms, step, offset, scale: baseScale, near, zoom, glyph, blob, fall, fallT, hang, ground } of sprites) {
+    for (const { s, type, anim, ms, step, offset, scale: baseScale, near, zoom, glyph, blob, fall, fallT, hang, ground, uncapped } of sprites) {
       const { screenX, dist, perp, h } = s;
 
       // Skip sprites hidden behind a wall at their screen column
@@ -2514,8 +2536,9 @@ export async function main(ns) {
       // looks smaller as you walk up to it (the old rule held things at their picture size within a few tiles).
       // Enemies: full size (times zoom) within render.near tiles. Everything else (decorations, pickups, projectiles,
       // effects): picture size at 5 * scale tiles (unchanged from before), growing as you come closer, up to
-      // TUNING.itemGrowth times the picture size.
-      const scale = Math.max(0.1, Math.min(near ? 1 : TUNING.itemGrowth, (near || baseScale * 5.0) / perp)) * (zoom || 1);
+      // TUNING.itemGrowth times the picture size. Decorations are NOT capped (uncapped): with the cap a torch stopped growing
+      // 3 tiles away while the walls kept growing, so it looked smaller and smaller next to them as you walked up to it.
+      const scale = Math.max(0.1, Math.min(near ? 1 : uncapped ? Infinity : TUNING.itemGrowth, (near || baseScale * 5.0) / perp)) * (zoom || 1);
       const imgW = img.width * scale;
       const imgH = img.height * scale;
 
@@ -2672,7 +2695,7 @@ export async function main(ns) {
   // Grid cells are either a plain glyph or "<colour tag char><glyph>"
   // Colour tags: a tag is a control character placed in front of a glyph. Every tag used anywhere (KEYS[].tag, PICKUPS
   // glyph[0], PROJECTILES blob.tag, the literals in renderFrame) must have an entry here, or its colour is silently lost
-  // and the tag character leaks into the HTML. Keep tags unique per meaning. \x05, \x06, \x09 and \x1F are currently unused.
+  // and the tag character leaks into the HTML. Keep tags unique per meaning. \x06, \x09 and \x1F are currently unused.
   // decodeCell() also colours the floor characters in FLOOR_CHARS and the middle dot grey without a tag.
   // The glyph after a tag must be one UTF-16 unit because decodeCell() uses slice(1).
   const CELL_COLORS = {
@@ -2683,6 +2706,7 @@ export async function main(ns) {
     '\x10': '#3d3',  // nukage floor
     '\x1A': '#c63',  // brick wall
     '\x03': '#ff0',  // muzzle flash
+    '\x05': '#ccc',  // bullets (enemy pellets and where they land)
     '\x07': '#555',  // minimap wall / automap outline
     '\x04': '#99b',  // automap: explored wall
     '\x08': '#88f',  // blue door / key
@@ -2879,7 +2903,7 @@ export async function main(ns) {
   // ─── MAIN GAME LOOP ─────────────────────────────────────────────────────────
   // Player tuning, all per tick: movement in tiles, turn in radians. The player is a square of half-width
   // PLAYER_RADIUS tested at its four corners, and x and y are tested separately so the player slides along walls.
-  const SPEED = 0.105, TURN = 0.065, STRAFE_SPEED = 0.0975, PLAYER_RADIUS = 0.2;
+  const SPEED = 0.131, TURN = 0.065, STRAFE_SPEED = 0.122, PLAYER_RADIUS = 0.2;   // walking and strafing speed: tiles per tick (25% faster than 0.105 / 0.0975)
   // The player is a small square, not a point, so the camera can't poke into walls
   const canStand = (x, y) =>
     !solidAt(x - PLAYER_RADIUS, y - PLAYER_RADIUS) && !solidAt(x + PLAYER_RADIUS, y - PLAYER_RADIUS) &&
@@ -3245,7 +3269,10 @@ export async function main(ns) {
     const pd = Math.hypot(px - e.x, py - e.y);
     if (reaches(px, py, pd)) hurtPlayer(dmgAt(pd), boom.label, { volume: 0 });
     const nArt = boom.art ? framesFor(boom.art, 'idle')?.length || 0 : 0;
-    if (nArt) effects.push({ x: e.x, y: e.y, ttl: nArt * 2, sprite: boom.art, anim: 'idle', n: nArt, tpf: 2, scale: boom.scale ?? 2 });
+    // boom.after === 'die': start the art only after the dying enemy's own death frames (2 ticks each) have played; until then
+    // the effect waits (fx.wait counts down, nothing is drawn and its ttl does not run)
+    const wait = boom.after === 'die' ? (framesFor(e.type, 'die')?.length || 0) * 2 : 0;
+    if (nArt) effects.push({ x: e.x, y: e.y, ttl: nArt * 2, sprite: boom.art, anim: 'idle', n: nArt, tpf: 2, scale: boom.scale ?? 2, wait });
     if (boom.blob && !nArt && !framesFor(e.type, 'die')) {
       effects.push({ x: e.x, y: e.y, ttl: boom.blob.ttl ?? 8, sprite: false, anim: 'impact', blob: boom.blob });
     }
@@ -3443,7 +3470,9 @@ export async function main(ns) {
       const steps = Math.max(1, Math.ceil(def.speed / 0.15));   // small sub-steps so fast shots can't skip through things
       for (let i = 0; i < steps && p.alive; i++) {
         const nx = p.x + p.dx / steps, ny = p.y + p.dy / steps;
-        if (solidAt(nx, ny)) {
+        // also a wall when the step cuts diagonally across the corner between two solid cells (a diagonal wall has no gap)
+        const cutsCorner = Math.floor(nx) !== Math.floor(p.x) && Math.floor(ny) !== Math.floor(p.y) && solidAt(nx, p.y) && solidAt(p.x, ny);
+        if (solidAt(nx, ny) || cutsCorner) {
           if (p.owner === 'player') explode(p, p.x, p.y, null);   // goes off just in front of the wall
           else enemyShotLanded(p);
           break;
@@ -3462,6 +3491,7 @@ export async function main(ns) {
     }
     compactInPlace(projectiles, p => p.alive);        // so the array doesn't grow for the whole session
     for (const fx of effects) {
+      if (fx.wait > 0) { fx.wait--; continue; }   // not started yet (see deathBlast: boom.after)
       fx.ttl--; fx.age = (fx.age || 0) + 1;
       if (fx.vx || fx.vy) {   // thrown pieces slide, slow down and stop at a wall
         const nx = fx.x + fx.vx, ny = fx.y + fx.vy;

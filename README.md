@@ -62,7 +62,8 @@ what you had when it began.
 ## The automap (M)
 
 Opens a full-screen map and pauses the game. The outline of the level is always drawn. Rooms stay hidden until you
-have seen them. The exit is always marked, and items still lying around are shown even in unexplored areas. Enemies
+have seen them. The exit is always marked, and ammo, health and keycards still lying around are shown even in unexplored areas (weapons,
+armor and power-ups are not, so a big level stays readable). Enemies
 are never shown. `D` is a door, `K` a locked door, `E` the exit, the arrow is you.
 
 ## The first level (E1M1: Hangar)
@@ -125,7 +126,7 @@ Summoned enemies give no kills or points, and a spawner never has more than a fe
 
 | Char | Object | Notes |
 |---|---|---|
-| `0` | Exploding barrel | shoot it (3 hits with the pistol) and it explodes, hurting everything within 3 tiles: you, enemies and other barrels (they chain). Damage is highest in the middle and walls give shelter. Enemies it kills count as your kills; the barrel itself gives no kills or points. It blocks movement. |
+| `0` | Exploding barrel | shoot it (3 hits with the pistol) and it explodes, hurting everything within 3 tiles: you, enemies and other barrels (they chain). Damage is highest in the middle and walls give shelter. Its own explosion frames play first, then the tanks' big fireball (`Tank_Explosion`, set by `art`/`after` in its `onDeath.explode`). Enemies it kills count as your kills; the barrel itself gives no kills or points. It blocks movement. |
 
 **Decorations** (static, cosmetic, can't be shot; each one is a single picture)
 
@@ -183,6 +184,7 @@ just a new table entry. Each table has a comment explaining its fields.
 5. If it fires something new, add an entry to `PROJECTILES`. Projectile art is ONE `<Type>_projectile` image plus ONE
    `<Type>_projectile_impact` image, used when the projectile entry says `sprite: 'TYPE'`. There is no generic projectile
    art: a projectile without a `sprite` is drawn as an ASCII `blob`.
+   All bullets (the `pellet` projectile: zombies, sergeants, the Spider Mastermind, the tank machine gun) are drawn in the same light grey (colour tag `\x05`).
    Several enemies can share one projectile's art (the Cryobus uses the Cacodemon's). A ranged attack can also give
    `muzzles: [-0.45, 0.45]`: one shot is fired from each sideways offset (in tiles) instead of `count` shots from the
    centre, e.g. one fireball out of each arm. A projectile can also have `freeze: ticks`: an enemy shot that hits the
