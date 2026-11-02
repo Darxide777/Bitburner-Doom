@@ -19,6 +19,10 @@ run doom.js
 The game needs these files in the same place as `doom.js`: `map.txt` (the first level), `audio.json` (sounds) and
 `sprites.json` (art). They are all plain text because Bitburner can only store text files.
 
+**Tip: turn off autosave while you play.** Bitburner keeps all your files inside its save, and `audio.json` is about 24 MB, so
+each autosave can freeze the game for a moment. In Bitburner's Options, set the autosave interval to 0 before you start
+(File -> Save Game still works whenever you want to save), and turn it back on afterwards.
+
 ## Launch flags (cheats)
 
 Settings are flags you add when you start the script, for example `run doom.js --godmode --allweapons`.
@@ -62,9 +66,9 @@ what you had when it began.
 ## The automap (M)
 
 Opens a full-screen map and pauses the game. The outline of the level is always drawn. Rooms stay hidden until you
-have seen them. The exit is always marked, and ammo, health and keycards still lying around are shown even in unexplored areas (weapons,
-armor and power-ups are not, so a big level stays readable). Enemies
-are never shown. `D` is a door, `K` a locked door, `E` the exit, the arrow is you.
+have seen them. The exit is always marked, and so are keycards still lying around, even in unexplored areas. Ammo and health show only
+within 16 tiles of you (`AUTOMAP_ITEM_RADIUS`), as a plain `+` (health) or `=` (ammo). Weapons, armor and power-ups are never
+marked, so a big level stays readable. Enemies are never shown. `D` is a door, `K` a locked door, `E` the exit, the arrow is you.
 
 ## The first level (E1M1: Hangar)
 

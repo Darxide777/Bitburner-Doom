@@ -750,7 +750,7 @@ const ENEMIES = {
   // Art: Barrel_idle1.. (looped) and Barrel_death1.. (explosion frames); an ASCII barrel and flash are used until then.
   BARREL: {
     mapChar: '0', hp: 3, prop: true, points: 0, killMsg: '',
-    speed: 0, sight: 0, roam: 0, hitbox: 0.4, radius: 0.35, painChance: 0,
+    speed: 0, sight: 0, roam: 0, hitbox: 0.8, radius: 0.35, painChance: 0,
     anim: { walk: 300 }, render: { zoom: 3.8, fall: 0, corpse: false },   // a prop: same zoom as the zombie (picture 32 px tall vs 55), so it scales like everything else
     blob: { tag: '\x15', chars: 'O0o.', size: 0.4 },
     sounds: {},
@@ -882,7 +882,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '74';
+  const VERSION = '76';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1778,13 +1778,15 @@ export async function main(ns) {
   //   * the OUTLINE: `outline[idx]` marks the wall tiles on the outer boundary of the level (computed once per level
   //     by buildAutomapBase), so the overall shape is always visible but the rooms inside it are not;
   //   * the exit tile (always marked, so the player knows where to head);
-  //   * ammo, health and key pickups that are still lying around (except secret-room rewards until that spot is explored).
+  //   * key pickups that are still lying around (except secret-room rewards until that spot is explored); ammo and health only
+  //     within AUTOMAP_ITEM_RADIUS tiles of the player, drawn as a plain + (health) or = (ammo).
   //     Weapons, armor and power-ups are not marked (autoMapShows decides; a level can hold hundreds of items).
   // Enemies are never shown. Both arrays are REASSIGNED by parseMap() through buildAutomapBase(), so never keep a
   // reference to them. The map is drawn by renderAutomap(), which overwrites the whole ASCII grid at the end of
   // renderFrame(); if the level is too big for the screen it is shrunk by whole-tile blocks (see sx / sy in renderAutomap).
   const AUTOMAP_REVEAL_RADIUS = 14;   // how far (tiles) the player reveals; line of sight still applies
-  const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when standing still (doors open/close)
+  const AUTOMAP_ITEM_RADIUS = 16;     // ammo and health show on the map only this close to the player (keys and the exit always show)
+const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when standing still (doors open/close)
   let explored = new Uint8Array(0), outline = new Uint8Array(0);
   let automapOpen = false, automapResume = false, exploreTile = -1, exploreTimer = 0;
 
@@ -1903,7 +1905,10 @@ export async function main(ns) {
     for (const it of pickups) {
       const def = PICKUPS[it.type];
       const tx = Math.floor(it.x), ty = Math.floor(it.y);
-      if (it.alive && def && autoMapShows(def) && (!it.secret || explored[ty * MW + tx])) put(tx, ty, def.give?.key ? 85 : 80, def.glyph[0] + def.glyph[1]);
+      if (!it.alive || !def || !autoMapShows(def) || (it.secret && !explored[ty * MW + tx])) continue;
+      if (def.give?.key) { put(tx, ty, 85, def.glyph[0] + def.glyph[1]); continue; }   // keys: always, with their own letter
+      // ammo and health: only near you, and as one plain mark each (+ health, = ammo) instead of a different letter per pickup
+      if (Math.hypot(it.x - px, it.y - py) <= AUTOMAP_ITEM_RADIUS) put(tx, ty, 80, def.glyph[0] + (def.give?.health ? '+' : '='));
     }
     const angleNorm = ((pa % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
     put(Math.floor(px), Math.floor(py), 100, '\x0A' + ['►', '▼', '◄', '▲'][Math.floor((angleNorm + Math.PI / 4) / (Math.PI / 2)) % 4]);
