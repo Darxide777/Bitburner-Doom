@@ -251,7 +251,7 @@ const TUNING = {
   itemGrowth: 20,   // pickups, projectiles and effects grow as you approach, up to this many times their picture size. High on purpose: a low cap (it was 4) made big things such as the scale-3 explosions stop growing about 4 tiles away while the walls kept growing, so they looked smaller up close
   rangedReachView: true,   // ranged attacks and hitscan shots reach the whole view distance (see above)
   useRange: 2.0,   // how far ahead (tiles) F can reach a door or secret wall
-  doomFrame: { w: 960, h: 600 },   // size the DOOM page is loaded at, then scaled to fit the overlay (null = just stretch it). The player draws the game at 960x600
+  doomFrame: { w: 640, h: 600 },   // size the DOOM page is loaded at, then scaled to fit the overlay (null = just stretch it). In a 960x600 frame the Internet Archive player drew the game 640x400 against the LEFT edge (vertically centred), so the width is 640 = exactly the game's width. To make the game bigger on screen, try a smaller height (e.g. 480): too small and the player shrinks the game
   doomUrl: 'https://archive.org/embed/DoomsharewareEpisode',   // the Internet Archive's playable shareware DOS DOOM (use: 'doom'); its details page is the "open in a tab" link
   terminalUrl: 'https://bitburner-official.github.io/',   // web version of Bitburner, opened by the terminal in the level
   terminalRange: 1.8,
@@ -539,7 +539,8 @@ const PROJECTILES = {
 //             art: 'TANKEXPLOSION' plays that picture ("<Art>_idle1..N", scale = its size) at the spot; after: 'die' makes it wait until
 //             the enemy's own death frames have played (the barrel: its explosion first, then the tank-style one)
 //             By default it hurts only the player, with the full damage anywhere inside radius (Lost Soul).
-//             hurtsEnemies: true also damages every living enemy (and barrel) in radius, so explosions chain.
+//             hurtsEnemies: true also damages every living enemy (and barrel) in radius, so explosions chain. The tanks use it too; what climbs out of a
+//             tank (onDeath.spawn) appears about 10 ticks AFTER the blast, so its own blast never hurts its own spawns.
 //             falloff: true = damage fades linearly to 0 at the edge and needs line of sight (walls shelter you).
 //             blob: ASCII flash shown when the enemy has no "<Type>_death" art.
 //             art: sprite type of an explosion animation ("<Art>_idle1..N" played once at the enemy, 2 ticks a frame), scale: its size.
@@ -699,7 +700,7 @@ const ENEMIES = {
       { kind: 'ranged', projectile: 'pellet', muzzles: [-0.4, 0, 0.4], spread: 0.2, damage: 2, range: [2, 14], chance: 0.05, sound: 'zombietankattack', volume: 0.8 },
     ],
     onDeath: {
-      explode: { radius: 2.2, damage: 8, label: 'TANK EXPLOSION!', sound: 'zombietankexplode', falloff: true, art: 'TANKEXPLOSION', scale: 3, blob: { tag: '\x1B', chars: '@*+.', size: 1.5, ttl: 8 } },
+      explode: { radius: 2.2, damage: 8, label: 'TANK EXPLOSION!', sound: 'zombietankexplode', hurtsEnemies: true, falloff: true, art: 'TANKEXPLOSION', scale: 3, blob: { tag: '\x1B', chars: '@*+.', size: 1.5, ttl: 8 } },
       smoke: ['TANKSMOKE1', 'TANKSMOKE2', 'TANKSMOKE3', 'TANKSMOKE4'], debris: 'TANKGUN',
       spawn: { types: ['ZOMBIE', 'ZOMBIESERGEANT'], at: 12 },
     },
@@ -715,7 +716,7 @@ const ENEMIES = {
       { kind: 'ranged', projectile: 'tankmissile', muzzles: [-0.5, 0.5], spread: 0.04, range: [3, 16], chance: 0.02, sound: 'zombietankmissile', volume: 0.9 },
     ],
     onDeath: {
-      explode: { radius: 2.2, damage: 8, label: 'TANK EXPLOSION!', sound: 'zombietankexplode', falloff: true, art: 'TANKEXPLOSION', scale: 3, blob: { tag: '\x1B', chars: '@*+.', size: 1.5, ttl: 8 } },
+      explode: { radius: 2.2, damage: 8, label: 'TANK EXPLOSION!', sound: 'zombietankexplode', hurtsEnemies: true, falloff: true, art: 'TANKEXPLOSION', scale: 3, blob: { tag: '\x1B', chars: '@*+.', size: 1.5, ttl: 8 } },
       smoke: ['TANKSMOKE1', 'TANKSMOKE2', 'TANKSMOKE3', 'TANKSMOKE4'], debris: 'TANKMISSILEGUN',
       spawn: { types: ['ZOMBIE', 'ZOMBIESERGEANT'], at: 12 },
     },
@@ -731,7 +732,7 @@ const ENEMIES = {
       { kind: 'ranged', projectile: 'tankplasma', muzzles: [-0.45, 0.45], spread: 0.05, range: [2, 15], chance: 0.06, sound: 'zombieplasmatankattack', volume: 0.7 },
     ],
     onDeath: {
-      explode: { radius: 2.2, damage: 8, label: 'TANK EXPLOSION!', sound: 'zombietankexplode', falloff: true, art: 'TANKEXPLOSION', scale: 3, blob: { tag: '\x1B', chars: '@*+.', size: 1.5, ttl: 8 } },
+      explode: { radius: 2.2, damage: 8, label: 'TANK EXPLOSION!', sound: 'zombietankexplode', hurtsEnemies: true, falloff: true, art: 'TANKEXPLOSION', scale: 3, blob: { tag: '\x1B', chars: '@*+.', size: 1.5, ttl: 8 } },
       smoke: ['TANKSMOKE1', 'TANKSMOKE2', 'TANKSMOKE3', 'TANKSMOKE4'], debris: 'TANKPLASMAGUN',
       spawn: { types: ['ZOMBIE', 'ZOMBIESERGEANT'], at: 12 },
     },
@@ -886,7 +887,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '80';
+  const VERSION = '82';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1321,7 +1322,7 @@ export async function main(ns) {
   // (defaults to url; the Internet Archive's embed address is not the page you want in a tab, its details page is).
   // fixed = { w, h } (optional): load the page in a w x h frame and scale that frame up or down to fit the overlay, instead of
   // stretching the frame to the overlay. Used for the DOOM cabinet: the Internet Archive player draws the game at a fixed
-  // 960x600 in the corner of whatever space it gets, so a frame of exactly that size, scaled, fills the overlay properly.
+  // size in the left edge of whatever space it gets, so a frame of exactly that width, scaled, centres it in the overlay.
   function openTerminal(url = TUNING.terminalUrl, label = 'TERMINAL', tabUrl = url, fixed = null) {
     if (terminalEl) return;
     terminalResume = !paused;
