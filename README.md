@@ -16,7 +16,7 @@ Download or `wget` `install.js`, run `install.js`, then run `doom.js` once it ha
 run doom.js
 ```
 
-The game needs these files in the same place as `doom.js`: `map.txt` (the first level), `audio.json` (sounds) and
+The game needs these files in the same place as `doom.js`: `map_rooms.txt` and `map.txt` (the two levels), `audio.json` (sounds) and
 `sprites.json` (art). They are all plain text because Bitburner can only store text files.
 
 **Tip: turn off autosave while you play.** Bitburner keeps all your files inside its save, and `audio.json` is about 24 MB, so
@@ -33,7 +33,7 @@ Settings are flags you add when you start the script, for example `run doom.js -
 | `--infiniteammo` | weapons never run out of ammo |
 | `--allweapons` | start with every weapon and full ammo |
 | `--noautoswitch` | don't switch weapon automatically when the current one runs dry |
-| `--reset` | forget your points, store purchases, deaths and run history: start from zero |
+| `--reset` | forget your points, store purchases, weapon unlocks, deaths and run history: start from zero |
 | `--help` | print the list and quit |
 
 Flags can be combined in any order. An unknown flag is reported and ignored. A web-page converter has to provide `ns.flags`;
@@ -58,7 +58,7 @@ On the title screen use **Left/Right** to pick the difficulty (easy, normal, har
 | M | Full-screen automap with fog of war (pauses the game; M or P closes it) |
 | P | Pause / resume (the game also pauses by itself when the window loses focus) |
 | Mouse | Turn (click the game once to capture the mouse); left click shoots |
-| Enter | After dying: retry the level. After a level: go to the next one |
+| Enter | After dying: retry the level. After winning: play the level again. On the title screen: start (Up/Down level, Left/Right difficulty) |
 | Esc | Quit (with the mouse captured, the first Esc only releases it) |
 
 Weapons: 1 Pistol, 2 Shotgun, 3 Chaingun, 4 Rocket Launcher, 5 Plasma Rifle, 6 BFG 9000, 7 Chainsaw. You start with
@@ -71,15 +71,22 @@ Opens a full-screen map and pauses the game. The outline of the level is always 
 have seen them. The exit (if the map has one) is always marked. Pickups still lying around (a map can still contain them) show as before: keycards always, ammo and health only
 within 16 tiles of you (`AUTOMAP_ITEM_RADIUS`), weapons, armor and power-ups never. Enemies are never shown. `D` is a door, `K` a locked door, `E` the exit, the arrow is you.
 
-## The first level (E1M1: Hangar)
+## Choosing a level
 
-You start in the south-east in a safe room with the three arcade cabinets (no enemies; the store cabinet is here). There is no exit: **you win by killing all six Arch-viles.** They fall in a fixed order, each one behind a locked door: the first Arch-vile needs no key, and each one drops
-the keycard for the next door (blue, red, yellow, green, purple; see "Checkpoints"). Keys are not for sale and do not lie on the map. **The level is a roguelike:** the map holds no ordinary enemies, only exploding barrels and one Arch-vile asleep in each of
-the six biggest rooms (as far from the room's doors as it can be). The small rooms have none. What you fight is whatever they summon.
-Every decoration and tile type appears at least once. A dead-end corridor off the east side of the second cave
-leads to a secret wall (press F on it); behind it is a hidden room (empty now). Two nukage pools sit in the first
-hall and the big cave (buy a radiation suit in the store). Two rooms use the brick (`%`) and tech (`&`) wall looks.
-The map holds no pickups at all (no health, ammo, weapons, armor, keys or power-ups): everything is in the store (see below).
+On the title screen, **Up/Down choose the level** and Left/Right the difficulty. There are two: **ROOMS** (square rooms, below) and **HANGAR** (the old hand-drawn map in `map.txt`, with caves and six Arch-viles behind coloured doors). Winning a level offers to play the same one again; the levels are separate maps, not an episode. Your points, purchases and unlocks are shared by both.
+
+## ROOMS (the default level)
+
+`map_rooms.txt`: seven square rooms (30 x 30 tiles each) in a snake, joined by short corridors with one door in the middle of each. You start in a plain room in the
+top-left corner that holds only the three arcade cabinets (Bitburner, DOOM, and the store). The other six rooms each have an exploding-barrel scatter (nine barrels) and a
+10 x 10 pool of nukage in the middle, so you have to fight along the edge. Every room except the last holds **one Arch-vile**, asleep in the corner farthest from the door; the last room holds **two**.
+There is no exit: **you win by killing all seven Arch-viles.** They fall in a fixed order, each one behind a locked door: the first room's door is plain, and each Arch-vile
+drops the keycard for the next door (blue, red, yellow, green, purple; see "Checkpoints"), so the doors open in that order. Keys are not for sale and do not lie on the map.
+**The level is a roguelike:** the map holds no ordinary enemies, only barrels and the Arch-viles; what you fight is whatever they summon. There are no pickups at all (no health, ammo, weapons,
+armor, keys or power-ups): everything is in the store (see below). The walls, floor, ceiling and sky are the stone textures from `sprites.json`; there is no decoration.
+
+The old Hangar map (with its caves, secret room and decorations) is still in `map.txt` and is the second entry on the level select. `make_rooms.py` (next to
+`sprites_tool.py`, not needed to play) generates a rooms map like this one: `python make_rooms.py map_rooms.txt [seed]` (the seed changes where the barrels fall).
 
 ## Points and the store
 
@@ -90,7 +97,7 @@ Enter (or B) buys, Esc closes; or click a tab, a row or its BUY button. Purchase
 
 | Tab | What it sells |
 |---|---|
-| WEAPONS | pistol, shotgun, chaingun, rocket launcher, plasma rifle, BFG 9000 (each starts with some ammo; you always have the chainsaw) |
+| WEAPONS | pistol, shotgun, chaingun, rocket launcher, plasma rifle, BFG 9000 (each starts with some ammo; you always have the chainsaw). The pistol and shotgun are for sale from the start; **the rest are locked until you kill Arch-viles:** the 1st unlocks the chaingun, the 2nd the rocket launcher, the 3rd the plasma rifle and the 4th the BFG. The best number of Arch-viles you ever killed in one run is saved, so an unlock is permanent |
 | AMMO | extra starting ammo for each type (+50 bullets, +8 shells, +4 rockets, +40 cells per purchase; the price rises 25% each time) |
 | SURVIVAL | +10 starting health (repeatable), +25 starting armor (up to 4 times) |
 | ITEMS | consumables kept in stock (up to 9 each) and used in a run with a key: **Z** Berserk (+100 health, double damage 60s), **X** Invulnerability (30s), **C** Radiation suit (60s), **V** Medkit (+25), **B** Armor vest (+50), **N** Ammo pack (refills the weapon in your hands) |
@@ -104,14 +111,14 @@ consumables reuse them.
 Every Arch-vile the map places is a checkpoint when it dies: you get **+50 health** (`TUNING.checkpointHeal`, never above 100) and **the next keycard** (blue, red, yellow, green, then purple).
 On the first level each Arch-vile's area is behind a locked door that takes the previous Arch-vile's keycard, so they can only be killed in one order and you can never be stuck
 without a key. If you die afterwards you restart **at the start of the level** (so you can use the store first), with every Arch-vile you already killed still dead and your keys kept.
-The level is won when **every Arch-vile is dead**. Starting a new game or a new level clears the checkpoint, and it is kept only while the script runs (closing the game
+**Every Arch-vile you kill also makes all enemies tougher** (`TUNING.threat`: +10% hit points and +5% damage to you per kill, stacking, for the rest of the run; enemies already alive are toughened too, and nukage is not scaled). The level is won when **every Arch-vile is dead**. Starting a new game or a new level clears the checkpoint, and it is kept only while the script runs (closing the game
 forgets it; points and purchases are saved separately). Keycards used to be sold in the store; if your save has any, their price is refunded as points.
 
 **Run history.** Every run, whether you die or win, is recorded (result, time, kills, score, and the health and weapons you started with)
 and the end screen shows your last four runs as bars with the best score starred, plus totals and your fastest win. Press `H` on the end screen for
 the full history (the last 16 runs, side by side). Runs played with cheat flags are marked `(cheats)` and never count as a best. The last 200 runs are kept.
 Everything is saved in `doom_progress.txt` (plain JSON text) so it survives closing the script; the web page version keeps it only while the page is open.
-Your points and purchases are saved there too. `run doom.js --reset` wipes it all: points, purchases, deaths and history. Pickups still work if you want them in a map: `a n o p` (ammo), `h` (health), `r` (armor), `b e w` (keys) and `2`-`7` (weapons) in `map.txt` as before.
+Your points, purchases and weapon unlocks are saved there too. `run doom.js --reset` wipes it all: points, purchases, deaths and history. Pickups still work if you want them in a map: `a n o p` (ammo), `h` (health), `r` (armor), `b e w` (keys) and `2`-`7` (weapons) in `map.txt` as before.
 
 ## Map files
 
@@ -198,8 +205,7 @@ stays blank, use the tab link. All three cabinets are the same flame machine wit
 `Arcade_Doom_idle1` and `Arcade_Store_idle1` (`Arcade_Soon_idle1` is unused now) (85x170 pixels each, `scale: 0.32` in `DECORATIONS`; picture height x scale
 should stay near 54 to keep them about 0.6 of a wall tall).
 
-The first level is `map.txt`. More levels are more map files listed in `LEVELS` near the top of `doom.js`; winning the
-last one ends the game. Enemies hunt you: they chase where they last saw or heard you, find a route around walls,
+The levels are the map files listed in `LEVELS` near the top of `doom.js` (the title screen's level select shows them; add a line and a file to add one). Enemies hunt you: they chase where they last saw or heard you, find a route around walls,
 and open ordinary doors (not locked ones).
 
 ## Adding content (modding)

@@ -173,14 +173,14 @@ const SPRITE_ALIASES = {
   'Lost_Soul_projectile_impact': 'Lost_Soul_death5',    // the skull's impact flash is its last death frame
 };
 // ─── LEVELS ─────────────────────────────────────────────────────────────────
-// Played in order. name: shown on the level banner and end screen. par: seconds shown as the par time.
-// Each map is a text file in the same folder as doom.js. Health, armor, ammo, weapons and score carry over to
-// the next level; keys, power-ups, kills and secrets do not. Dying restarts the level with what you had when
-// it began. To add a level, copy the line and name your file.
+// Chosen on the title screen with Up/Down (selLevel). name: shown on the level banner, automap and end screen (the part before the colon is what the run
+// history records). par: seconds shown as the par time. Each map is a text file in the same folder as doom.js. Winning a level offers to play it again (it does not move on to the
+// next entry; the levels are separate maps, not an episode). Dying restarts the level with what the store gives you. To add a level, copy a line and name your file.
 // (install.js looks for the property name `map` + a colon + a quoted file name in this repo's doom.js to know
 // which map files to download, so keep that spelling.)
 const LEVELS = [
-  { name: 'E1M1: HANGAR', map: ASSETS.map, par: 180 },
+  { name: 'ROOMS: Square rooms', map: 'map_rooms.txt', par: 600 },   // seven square rooms in a snake, one locked door between each (built by make_rooms.py)
+  { name: 'HANGAR: The old map', map: ASSETS.map, par: 180 },   // the first hand-drawn map (caves, six Arch-viles behind coloured doors)
 ];
 
 // Names of the sounds the game itself plays (keys in audio.json)
@@ -209,6 +209,7 @@ const START = { health: 100, armor: 0, weapons: ['chainsaw'] };   // what every 
 //   cat      tab it appears under: WEAPONS | AMMO | SURVIVAL | ITEMS (the order of STORE_CATS)
 //   name, desc   shown in the store (weapon / key / ammo items take their name from WEAPONS / KEYS / AMMO_TYPES when `name` is left out)
 //   price    cost of the first purchase; growth = extra fraction of price added per earlier purchase (0.25: 100, 125, 150 ...)
+//   unlock   n: not for sale until you have killed n Arch-viles in one run (the best count ever is saved as `avBest`); a locked item is shown but cannot be bought
 //   max      most times it can be bought (weapons and keys: 1; tiers: leave out = no limit)
 // What it does (one of):
 //   weapon: id of WEAPONS          you start every run with it (its ammo type starts with AMMO_TYPES[].start rounds, once any weapon of that type is owned)
@@ -223,10 +224,10 @@ const STORE_MAX_STOCK = 9;
 const STORE = [
   { id: 'pistol', cat: 'WEAPONS', weapon: 'pistol', price: 500, desc: 'Starts with 100 bullets' },
   { id: 'shotgun', cat: 'WEAPONS', weapon: 'shotgun', price: 1500, desc: 'Starts with 8 shells' },
-  { id: 'chaingun', cat: 'WEAPONS', weapon: 'chaingun', price: 3000, desc: 'Fast bullets' },
-  { id: 'rocketlauncher', cat: 'WEAPONS', weapon: 'rocketlauncher', price: 5000, desc: 'Starts with 4 rockets' },
-  { id: 'plasmarifle', cat: 'WEAPONS', weapon: 'plasmarifle', price: 8000, desc: 'Starts with 40 cells' },
-  { id: 'bfg9000', cat: 'WEAPONS', weapon: 'bfg9000', price: 12000, desc: 'Uses cells' },
+  { id: 'chaingun', cat: 'WEAPONS', weapon: 'chaingun', unlock: 1, price: 3000, desc: 'Fast bullets' },
+  { id: 'rocketlauncher', cat: 'WEAPONS', weapon: 'rocketlauncher', unlock: 2, price: 5000, desc: 'Starts with 4 rockets' },
+  { id: 'plasmarifle', cat: 'WEAPONS', weapon: 'plasmarifle', unlock: 3, price: 8000, desc: 'Starts with 40 cells' },
+  { id: 'bfg9000', cat: 'WEAPONS', weapon: 'bfg9000', unlock: 4, price: 12000, desc: 'Uses cells' },
   { id: 'ammo_bullets', cat: 'AMMO', ammo: 'bullets', amount: 50, price: 100, growth: 0.25, desc: '+50 starting bullets (pistol, chaingun)' },
   { id: 'ammo_shells', cat: 'AMMO', ammo: 'shells', amount: 8, price: 150, growth: 0.25, desc: '+8 starting shells (shotgun)' },
   { id: 'ammo_rockets', cat: 'AMMO', ammo: 'rockets', amount: 4, price: 200, growth: 0.25, desc: '+4 starting rockets (rocket launcher)' },
@@ -288,6 +289,7 @@ const TUNING = {
   painTicks: 6,
   hazard: { damage: 2, interval: 15, label: 'NUKAGE!' },
   powerTicks: { invuln: 750, radsuit: 1500, berserk: 1500 },
+  threat: { hp: 0.10, damage: 0.05 },   // every Arch-vile you kill (this run) makes ALL enemies this much tougher: +10% hit points and +5% damage to you, each kill (stacking; see threatMult)
   checkpointHeal: 50,   // health you get when a map-placed Arch-vile dies (also a CHECKPOINT, see `checkpoint`); never above 100 (or what you already have)
   freezeGraceTicks: 50,
   spawnWarningTicks: 14,   // about half a second
@@ -943,13 +945,14 @@ export async function main(ns) {
   const INFINITE_HEALTH = !!flags.godmode;
   const INFINITE_AMMO = !!flags.infiniteammo;
   const ALL_WEAPONS = !!flags.allweapons;
-  // SAVED PROGRESS (PROGRESS_FILE, JSON text): `deaths`, `points` (banked score to spend in the STORE), `buys` (STORE id -> times bought), `inv` (STORE id -> consumables in stock) and `runs`, the history of every run you have finished, which keeps
+  // SAVED PROGRESS (PROGRESS_FILE, JSON text): `deaths`, `avBest` (most Arch-viles killed in one run, unlocks store weapons), `points` (banked score to spend in the STORE), `buys` (STORE id -> times bought), `inv` (STORE id -> consumables in stock) and `runs`, the history of every run you have finished, which keeps
   // growing after you win (only the last MAX_RUNS are kept). A run is one attempt, ended by dying or by reaching the exit; each entry is
   //   { n: run number, r: 'DIED' | 'WON', lv: level, t: seconds, k: kills, kt: kill total, sc: score, hp: health you started with,
   //     w: weapons you started with, ch: true if cheat flags were on }
   // Read at start, written whenever a run ends. A missing or unreadable file means a fresh start; an older file holding just a number
   // is read as the death count. The end screen shows the last few runs as bars, and H opens the full history (see historyLines).
   const REFUNDED_ITEMS = { key_blue: 400, key_red: 1000, key_yellow: 2000 };   // store items that no longer exist, with what they cost
+  let avBest = 0;   // most Arch-viles you have killed in one run: weapon n in the STORE unlocks at n (see `unlock`)
   let deaths = 0, runs = [], points = 0, buys = {}, inv = {};
   const cleanCounts = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).map(([k, v]) => [k, Math.max(0, Math.floor(Number(v)) || 0)]).filter(([k, v]) => v > 0 && STORE.some(i => i.id === k)));
   if (!flags.reset) {
@@ -958,18 +961,19 @@ export async function main(ns) {
       if (raw.startsWith('{')) {
         const o = JSON.parse(raw);
         deaths = Math.max(0, Math.floor(Number(o.deaths)) || 0);
+        avBest = Math.max(0, Math.floor(Number(o.avBest)) || 0);
         points = Math.max(0, Math.floor(Number(o.points)) || 0); buys = cleanCounts(o.buys); inv = cleanCounts(o.inv);
         for (const [id, price] of Object.entries(REFUNDED_ITEMS)) if (o.buys?.[id]) points += price;   // keycards used to be for sale: give the points back
         runs = Array.isArray(o.runs) ? o.runs.filter(x => x && typeof x === 'object' && Number.isFinite(x.sc) && Number.isFinite(x.t)) : [];
       } else deaths = Math.max(0, parseInt(raw, 10) || 0);
-    } catch (e) { deaths = 0; runs = []; points = 0; buys = {}; inv = {}; }
+    } catch (e) { deaths = 0; runs = []; points = 0; buys = {}; inv = {}; avBest = 0; }
   }
   const MAX_RUNS = 200;
   const CHEATING = INFINITE_HEALTH || INFINITE_AMMO || ALL_WEAPONS;
   // Bitburner kills a script that calls ANY ns function while its main loop is waiting in ns.sleep ("concurrent calls"), which is exactly where
   // key and click handlers run. So handlers (store purchases, using an item) only set saveDirty, and the frame loop writes the file between its sleeps.
   let saveDirty = false;
-  const saveProgress = () => { try { ns.write(PROGRESS_FILE, JSON.stringify({ deaths, points, buys, inv, runs: runs.slice(-MAX_RUNS) }), 'w'); } catch (e) { } };
+  const saveProgress = () => { try { ns.write(PROGRESS_FILE, JSON.stringify({ deaths, avBest, points, buys, inv, runs: runs.slice(-MAX_RUNS) }), 'w'); } catch (e) { } };
   if (flags.reset) saveProgress();
   // Adds the run that just ended (result 'DIED' or 'WON') to the history and saves it. Call once, after endTime and score are final.
   let bankedScore = 0;   // how much of the current `score` is already in `points` (the score carries over between levels of one run, so only the new part is banked)
@@ -988,7 +992,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '99';
+  const VERSION = '103';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1507,7 +1511,9 @@ export async function main(ns) {
   const itemPrice = i => Math.round(i.price * (1 + (i.growth || 0) * bought(i.id)));
   const itemMax = i => i.max ?? (i.weapon ? 1 : i.hotkey ? STORE_MAX_STOCK : Infinity);
   const itemCount = i => (i.hotkey ? inv[i.id] : bought(i.id)) || 0;
+  const itemLocked = i => (i.unlock || 0) > avBest && !ALL_WEAPONS;
   function buyItem(item) {
+    if (itemLocked(item)) { storeMsg = `KILL ${item.unlock - avBest} MORE ARCH-VILE${item.unlock - avBest > 1 ? 'S' : ''} TO UNLOCK`; return; }
     if (itemCount(item) >= itemMax(item)) { storeMsg = item.hotkey ? 'STOCK FULL' : 'ALREADY OWNED'; return; }
     const price = itemPrice(item);
     if (points < price) { storeMsg = `NEED ${price - points} MORE POINTS`; return; }
@@ -1538,11 +1544,11 @@ export async function main(ns) {
     storeSel = Math.max(0, Math.min(storeSel, items.length - 1));
     const tabs = STORE_CATS.map((c, n) => `<span data-tab="${n}" style="cursor:pointer;padding:3px 10px;margin-right:6px;border:1px solid #0a0;${n === storeTab ? 'background:#0a0;color:#000;' : ''}">${c}</span>`).join('');
     const rows = items.map((i, n) => {
-      const cnt = itemCount(i), full = cnt >= itemMax(i), can = !full && points >= itemPrice(i);
+      const cnt = itemCount(i), full = cnt >= itemMax(i), can = !full && !itemLocked(i) && points >= itemPrice(i);
       const have = i.hotkey ? `STOCK ${cnt}  [${i.hotkey.toUpperCase()}]` : itemMax(i) === 1 ? (cnt ? 'OWNED' : '') : cnt ? `LEVEL ${cnt}` : '';
-      const price = full ? (i.hotkey ? 'FULL' : 'SOLD') : itemPrice(i);
+      const locked = itemLocked(i), price = locked ? 'LOCKED' : full ? (i.hotkey ? 'FULL' : 'SOLD') : itemPrice(i);
       return `<div data-row="${n}" style="display:flex;align-items:center;gap:10px;padding:6px 8px;margin:3px 0;cursor:pointer;border:1px solid ${n === storeSel ? '#6f6' : '#031'};background:${n === storeSel ? '#041' : 'transparent'};">` +
-        `<span style="width:190px;color:#fff">${itemName(i)}</span><span style="flex:1;color:#8c8">${i.desc || ''}</span>` +
+        `<span style="width:190px;color:#fff">${itemName(i)}</span><span style="flex:1;color:#8c8">${itemLocked(i) ? `Kill ${i.unlock} Arch-vile${i.unlock > 1 ? 's' : ''} in one run to unlock` : i.desc || ''}</span>` +
         `<span style="width:120px;color:#fc4">${have}</span><span style="width:70px;text-align:right;color:${can ? '#ff0' : '#a55'}">${price}</span>` +
         `<span data-buy="${n}" style="padding:2px 10px;border:1px solid ${can ? '#0f0' : '#333'};color:${can ? '#0f0' : '#444'}">BUY</span></div>`;
     }).join('');
@@ -1764,8 +1770,9 @@ export async function main(ns) {
   // Options: bypass (ignore armor), volume (0 = silent, the caller plays its own sound), ignoreCritical (keep showing
   // the damage label even when health is below 30), style (FLASH_STYLES key). Side effects: face expression, flash
   // message, and on death sets gameOver/endTime and shows YOU DIED. Does nothing once gameOver is set or while invulnerable.
-  function hurtPlayer(dmg, label = 'HIT!', { bypass = false, volume = 0.8, ignoreCritical = false, style = '' } = {}) {
+  function hurtPlayer(dmg, label = 'HIT!', { bypass = false, volume = 0.8, ignoreCritical = false, style = '', scale = true } = {}) {
     if (gameOver || powers.invuln > 0) return;   // invulnerable: no damage, no pain feedback
+    if (scale) dmg *= threatMult('damage');   // enemies hit harder after each Arch-vile kill (scale:false for the nukage)
     const actual = takeDamage(dmg, bypass);
     if (volume > 0) play(SOUNDS.hurt, volume);
     faceEl.textContent = health <= 0 ? FACES.dead : health < 30 ? FACES.lowHp : FACES.hit;
@@ -3041,16 +3048,18 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     ['', null],
     ['>>>  PRESS ENTER TO BEGIN  <<<', 'BLINK'],
     ['', null],
+    ['@LEVEL', '#ca0'],
     ['@DIFFICULTY', '#ca0'],
     ['', null],
     ['WASD Move  Q/E Strafe  F Use  SPACE/Click Shoot  1-7 Weapons  Tab Mini  M Map  Mouse Turn', '#555'],
   ];
 
+  let selLevel = 0;   // the level chosen on the title screen
   function renderTitleScreen(blink) {
     flatCanvas.style.display = 'none';
     pre.innerHTML = '';
     for (const [rawText, color] of TITLE_LINES) {
-      const text = rawText === '@DIFFICULTY' ? `<  DIFFICULTY: ${DIFFICULTIES[difficulty].name}  >` : rawText;
+      const text = rawText === '@DIFFICULTY' ? `<  DIFFICULTY: ${DIFFICULTIES[difficulty].name}  >` : rawText === '@LEVEL' ? (LEVELS.length > 1 ? `^  LEVEL: ${LEVELS[selLevel].name}  v` : LEVELS[selLevel].name) : rawText;
       if (!text) { pre.appendChild(doc.createTextNode('\n')); continue; }
       const line = center(text);
       const rc = color === 'BLINK' ? (blink ? '#ff0' : '#440') : color;
@@ -3115,7 +3124,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       ['', null],
       ...historyLines(4),
       ['', null],
-      [levelIndex + 1 < LEVELS.length ? '    ENTER: NEXT LEVEL   H: HISTORY   ESC: EXIT' : '  ENTER: PLAY AGAIN   H: HISTORY   ESC: EXIT', '#555'],
+      ['  ENTER: PLAY AGAIN   H: HISTORY   ESC: EXIT', '#555'],
     ] : [
       ['', null],
       ['  ██████████████████████████████  ', '#600'],
@@ -3151,11 +3160,11 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   }
 
   // ─── TITLE LOOP ─────────────────────────────────────────────────────────────
-  // Title phase: the same `keys` handlers are active, Left/Right choose the difficulty, the loop waits for Enter or Space, then clears those keys so the
+  // Title phase: the same `keys` handlers are active, Up/Down choose the level (selLevel, an index into LEVELS), Left/Right the difficulty, the loop waits for Enter or Space, then clears those keys so the
   // key press does not carry into the game. Heavy work (sprite decode, sound decode, validation, music) is done after
   // that, so the title appears at once. ESC at any point before the game loop goes straight to cleanup().
   hud.style.display = 'none';
-  let onTitle = true, blinkState = true, blinkCounter = 0, prevL = false, prevR = false;
+  let onTitle = true, blinkState = true, blinkCounter = 0, prevL = false, prevR = false, prevU = false, prevDn = false;
   const difficultyIds = Object.keys(DIFFICULTIES);
   while (onTitle && running) {
     blinkCounter++;
@@ -3165,6 +3174,10 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     const dir = (R && !prevR ? 1 : 0) - (L && !prevL ? 1 : 0);
     if (dir) difficulty = difficultyIds[(difficultyIds.indexOf(difficulty) + dir + difficultyIds.length) % difficultyIds.length];
     prevL = L; prevR = R;
+    const U = !!keys['ArrowUp'], Dn = !!keys['ArrowDown'];   // Up/Down: the level
+    const ldir = (Dn && !prevDn ? 1 : 0) - (U && !prevU ? 1 : 0);
+    if (ldir) selLevel = (selLevel + ldir + LEVELS.length) % LEVELS.length;
+    prevU = U; prevDn = Dn;
     renderTitleScreen(blinkState);
     if (keys['Enter'] || keys[' ']) onTitle = false;
     await ns.sleep(50);
@@ -3478,16 +3491,21 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   // puts you back at the START of the level (so you can use the store first) with the dead Arch-viles missing and those keys kept. 'fresh' and 'next'
   // (a new game, a new level) clear it. It lives only while the script runs. The level is WON when every Arch-vile it placed is dead (there is no exit
   // tile on the first map any more; see winLevel).
+  let flash2 = '';   // extra text for the checkpoint message (a new store weapon)
   let checkpoint = null, avTotal = 0;   // avTotal: how many Arch-viles the level placed (0 = the level has none, so killing them is not its goal)
   function reachCheckpoint(e) {
     const dead = [...(checkpoint?.level === levelIndex ? checkpoint.dead : []), e.spawnIdx];
     health = Math.min(Math.max(STAT_MAX.health, health), health + TUNING.checkpointHeal);
     const nextKey = Object.keys(KEYS).find(k => !heldKeys.has(k));
     if (nextKey) heldKeys.add(nextKey);
-    checkpoint = { level: levelIndex, dead, keys: [...heldKeys] };
+    const before = threatMult('hp'); checkpoint = { level: levelIndex, dead, keys: [...heldKeys] };
+    const grow = threatMult('hp') / before;
+    for (const x of enemies) if (x.alive && !x.def.prop) { x.hp *= grow; x.maxHp *= grow; }   // everything still alive gets tougher too
+    if (!CHEATING && dead.length > avBest) { avBest = dead.length; saveDirty = true; flash2 = `STORE: ${WEAPONS[STORE.find(i => i.unlock === avBest)?.weapon]?.name ?? ''} UNLOCKED`; }
     if (avTotal && !enemies.some(x => x.spawnIdx !== undefined && x.alive)) { winLevel('ALL ARCH-VILES DEAD!'); return; }
     play(SOUNDS.weaponPickup, 0.8);
-    flash(`CHECKPOINT!  +${TUNING.checkpointHeal} HEALTH${nextKey ? '  ' + KEYS[nextKey].name : ''}`, 60, 'secret');
+    flash(`CHECKPOINT!  +${TUNING.checkpointHeal} HEALTH${nextKey ? '  ' + KEYS[nextKey].name : ''}${flash2 ? '  -  ' + flash2 : ''}  -  ENEMIES GROW STRONGER`, 60, 'secret');
+    flash2 = '';
     updateHud();
   }
   // Ends the level as won: +1000, recorded in the run history. Called when the last Arch-vile dies, and when you step on an exit tile (TILE.EXIT, an 'E' in a map;
@@ -3499,8 +3517,12 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     flash(`${text || LEVELS[levelIndex].name.split(':')[0] + ' COMPLETE!'} +1000`, 9999);
     updateHud();
   }
+  // THREAT: each Arch-vile killed this run (checkpoint.dead) multiplies enemy hit points / damage by 1 + TUNING.threat[stat] per kill. A new run after dying keeps it
+  // (the dead stay dead), a new game or level resets it. New enemies are made with it; the ones already alive are scaled when the kill happens (reachCheckpoint).
+  const avKills = () => (checkpoint?.level === levelIndex ? checkpoint.dead.length : 0);
+  const threatMult = (stat, n = avKills()) => 1 + TUNING.threat[stat] * n;
   function makeEnemy(type, x, y) {
-    const hp = Math.max(1, Math.round(ENEMIES[type].hp * DIFFICULTIES[difficulty].enemyHp));
+    const hp = Math.max(1, Math.round(ENEMIES[type].hp * DIFFICULTIES[difficulty].enemyHp * threatMult('hp')));
     return {
       type, def: ENEMIES[type],
       x, y, spawnX: x, spawnY: y,
@@ -3911,7 +3933,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     for (const k in powers) if (powers[k] > 0) powers[k]--;
     if (tileAt(px, py) === TILE.HAZARD && powers.radsuit <= 0) {
       if (hazardTimer > 0) hazardTimer--;
-      else { hazardTimer = TUNING.hazard.interval; hurtPlayer(TUNING.hazard.damage, TUNING.hazard.label, { volume: 0.4 }); }
+      else { hazardTimer = TUNING.hazard.interval; hurtPlayer(TUNING.hazard.damage, TUNING.hazard.label, { volume: 0.4, scale: false }); }
     } else hazardTimer = 0;
     // ── Exit check ───────────────────────────────────────────────────────
     if (tileAt(px, py) === TILE.EXIT) {
@@ -4039,7 +4061,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   const TARGET_FRAME_MS = 40;    // aim for ~25 frames per second
 
   try {
-    startLevel(0, 'fresh');
+    startLevel(selLevel, 'fresh');
     inGame = true;
     let last = Date.now(), acc = 0, prevEnter = false, prevH = false;
     while (running) {
@@ -4067,7 +4089,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
         prevH = hKey;
         const enter = !!keys['Enter'];
         if (enter && !prevEnter) {
-          if (won) { if (levelIndex + 1 < LEVELS.length) startLevel(levelIndex + 1, 'next'); else startLevel(0, 'fresh'); }
+          if (won) startLevel(levelIndex, 'fresh');   // play the same level again (pick another on the title screen next time you start the script)
           else startLevel(levelIndex, 'retry');
           last = Date.now();
         }
