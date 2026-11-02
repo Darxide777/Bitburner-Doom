@@ -204,7 +204,7 @@ ignored.
 | `g` | Chaingunner | fast bursts of bullets |
 | `Z` | Zombie Sergeant | tougher shotgun zombie: a wide blast of seven pellets |
 | `B` | Baron of Hell | tough, green fireballs and a claw |
-| `m` | Cryobus | slow ice Mancubus: two fireballs per attack, one out of each arm; a hit freezes you in place for 3 seconds (you can still turn and shoot) |
+| `m` | Cryobus | slow ice Mancubus: two fireballs per attack, one out of each arm; a hit freezes you in place for 3 seconds (you can still turn and shoot), and after you thaw you can't be frozen again for 5 seconds |
 | `Y` | Cyberdemon | boss, rockets |
 | `M` | Spider Mastermind | boss, chaingun (a stream of single bullets) |
 | `L` | Pain Elemental | spawner: summons Lost Souls (a fire spike warns where each one will appear) |
@@ -278,7 +278,7 @@ just a new table entry. Each table has a comment explaining its fields.
    `muzzles: [-0.45, 0.45]`: one shot is fired from each sideways offset (in tiles) instead of `count` shots from the
    centre, e.g. one fireball out of each arm. A projectile can also have `freeze: ticks`: an enemy shot that hits the
    player stops them walking for that long (25 ticks = 1 second; the Cryobus uses 75). The HUD shows FROZEN with a
-   countdown, and `TUNING.freezeGraceTicks` (default 50) is the window after thawing in which you can't be frozen again.
+   countdown, and `TUNING.freezeGraceTicks` (default 125, 5 seconds) is the window after thawing in which you can't be frozen again.
 5b. Reach: with `TUNING.rangedReachView` on (the default), ranged attacks and your bullet weapons reach as far as the view
    distance (up to 32 tiles), so if you can see an enemy it can shoot you and the other way round. The `range` max of a ranged
    attack is then ignored (its min still applies); melee and spawn attacks keep their ranges. Set it to `false` to go back to
@@ -344,8 +344,8 @@ all out and you get the old ASCII look. Nukage tiles are painted as flickering g
 the game lists the placeholders in use when it starts. To replace one, add the sound's name to `audio.json`; it takes
 over by itself.
 
-Sounds from the world (enemies, explosions) are limited to 32 playing at once and 6 of one kind (`MAX_WORLD_VOICES`, `MAX_VOICES_PER_SOUND` in `doom.js`): in the late ARENA rounds, with hundreds of enemies shooting,
-the browser's audio engine was flooded and all sound stopped. Your own weapon and menu sounds are never dropped.
+Sounds are limited so the browser's audio engine can't be flooded (in the late ARENA rounds it was, and all sound stopped): sounds from the world (enemies, explosions) to 32 playing at once and 6 of one kind
+(`MAX_WORLD_VOICES`, `MAX_VOICES_PER_SOUND` in `doom.js`), everything together to 48 and 8 of one kind (`MAX_VOICES_TOTAL`, `MAX_VOICES_ANY`), and the "you are hit" sound to about 8 per second.
 
 ## Updating, modding and running as a web page
 

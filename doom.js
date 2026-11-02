@@ -307,7 +307,7 @@ const TUNING = {
   enemyProjectileSpeed: 1.5,   // multiplies the speed of every ENEMY shot (fireballs, bullets, skulls, missiles); your own weapons' shots are not affected
   threat: { hp: 0.10, damage: 0.05 },   // every Arch-vile you kill (this run) makes ALL enemies this much tougher: +10% hit points and +5% damage to you, each kill (stacking; see threatMult)
   checkpointHeal: 50,   // health you get when a map-placed Arch-vile dies (also a CHECKPOINT, see `checkpoint`); never above 100 (or what you already have)
-  freezeGraceTicks: 50,
+  freezeGraceTicks: 125,   // 5 seconds
   spawnWarningTicks: 14,   // about half a second
   itemGrowth: 20,   // pickups, projectiles and effects grow as you approach, up to this many times their picture size. High on purpose: a low cap (it was 4) made big things such as the scale-3 explosions stop growing about 4 tiles away while the walls kept growing, so they looked smaller up close
   rangedReachView: true,   // ranged attacks and hitscan shots reach the whole view distance (see above)
@@ -1020,7 +1020,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '112';
+  const VERSION = '114';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1800,11 +1800,12 @@ export async function main(ns) {
   // Options: bypass (ignore armor), volume (0 = silent, the caller plays its own sound), ignoreCritical (keep showing
   // the damage label even when health is below 30), style (FLASH_STYLES key). Side effects: face expression, flash
   // message, and on death sets gameOver/endTime and shows YOU DIED. Does nothing once gameOver is set or while invulnerable.
+  let lastHurtSound = 0;
   function hurtPlayer(dmg, label = 'HIT!', { bypass = false, volume = 0.8, ignoreCritical = false, style = '', scale = true } = {}) {
     if (gameOver || powers.invuln > 0) return;   // invulnerable: no damage, no pain feedback
     if (scale) dmg *= threatMult('damage') * arenaStat('damage');   // enemies hit harder after each Arch-vile kill (scale:false for the nukage)
     const actual = takeDamage(dmg, bypass);
-    if (volume > 0) play(SOUNDS.hurt, volume);
+    if (volume > 0 && nowMs() - lastHurtSound > 120) { lastHurtSound = nowMs(); play(SOUNDS.hurt, volume); }   // (at most ~8 per second: in the late ARENA rounds hundreds of shots hit you each second, and a sound per hit flooded the audio engine)
     faceEl.textContent = health <= 0 ? FACES.dead : health < 30 ? FACES.lowHp : FACES.hit;
     faceHitTimer = 12; // ~500ms at 40ms per tick
     if (!ignoreCritical && health < 30) flash('CRITICAL!', 20);
@@ -1849,16 +1850,17 @@ export async function main(ns) {
   // Play a sound by name. Unknown names are silent (checkGameData reports them once at startup).
   // Fire-and-forget playback by sound name. Resolution order: sfx[name], then sfx[SOUND_FALLBACKS[name]], else silence.
   // Only ONE level of fallback is followed. `pan` is -1 (left) .. 1 (right); 0 skips the panner node entirely. Each
-  // call creates new source and gain nodes (they are garbage collected when the sound ends). play() itself never refuses a sound, but it counts the sounds
-  // playing (voices, voicesByName); playAt() refuses world sounds when too many are already playing (MAX_WORLD_VOICES overall, MAX_VOICES_PER_SOUND of one kind), because
-  // hundreds of enemies in a late ARENA round used to flood the browser's audio engine until ALL sound stopped.
+  // call creates new source and gain nodes (they are garbage collected when the sound ends). It counts the sounds playing (voices, voicesByName). play() refuses a sound when
+  // MAX_VOICES_TOTAL are already playing or MAX_VOICES_ANY of that kind; playAt() is stricter for world sounds (MAX_WORLD_VOICES overall, MAX_VOICES_PER_SOUND of one kind), because
+  // hundreds of enemies and shots in a late ARENA round used to flood the browser's audio engine until ALL sound stopped (the player-hurt sound played once per shot that hit you).
   // Use playAt() for sounds that happen somewhere in the world.
-  const MAX_WORLD_VOICES = 32, MAX_VOICES_PER_SOUND = 6;
+  const MAX_WORLD_VOICES = 32, MAX_VOICES_PER_SOUND = 6, MAX_VOICES_TOTAL = 48, MAX_VOICES_ANY = 8;
   let voices = 0;
   const voicesByName = {};
   function play(name, volume = 1.0, pan = 0) {
     const buffer = sfx[name] ?? sfx[SOUND_FALLBACKS[name]];   // missing sound -> placeholder (or silence)
     if (!buffer) return;
+    if (voices >= MAX_VOICES_TOTAL || (voicesByName[name] || 0) >= MAX_VOICES_ANY) return;   // safety net for every sound, whoever asks: never flood the audio engine
     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => { });   // (the browser may suspend it; this is not an ns call, so it is safe anywhere)
     const src = audioCtx.createBufferSource();
     voices++; voicesByName[name] = (voicesByName[name] || 0) + 1;
