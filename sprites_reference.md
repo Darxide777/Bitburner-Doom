@@ -1,7 +1,7 @@
 # sprites.json Reference
 
 **Last updated:** 2026-11-01
-**Total sprites:** 344 images in the file + 2 aliases
+**Total sprites:** 345 images in the file + 2 aliases
 **File:** `C:\Users\carly\Documents\Bitburner-Doom\sprites.json` (about 970 KB, **do not read it**: this file and `sprites_tool.py` replace reading it)
 
 This is a helper for AI agents. It lists every sprite name the game knows and explains the file format and naming
@@ -842,4 +842,10 @@ type also needs its entry in `ENEMIES` in `doom.js`, and one with a projectile n
 | Key | Animation | Frame | Size (px) / note |
 |---|---|---|---|
 | `Arcade_Soon_idle1` | idle | 1 | 89x170 |
+
+### ARCADESTORE  (1 sprites)
+
+| Key | Animation | Frame | Size (px) / note |
+|---|---|---|---|
+| `Arcade_Store_idle1` | idle | 1 | 89x170 |
 <!-- SPRITES:END -->

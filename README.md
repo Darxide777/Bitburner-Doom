@@ -33,7 +33,7 @@ Settings are flags you add when you start the script, for example `run doom.js -
 | `--infiniteammo` | weapons never run out of ammo |
 | `--allweapons` | start with every weapon and full ammo |
 | `--noautoswitch` | don't switch weapon automatically when the current one runs dry |
-| `--reset` | forget your deaths and run history: the roguelike bonuses (extra weapons, health, ammo) start again from zero |
+| `--reset` | forget your points, store purchases, deaths and run history: start from zero |
 | `--help` | print the list and quit |
 
 Flags can be combined in any order. An unknown flag is reported and ignored. A web-page converter has to provide `ns.flags`;
@@ -50,9 +50,10 @@ On the title screen use **Left/Right** to pick the difficulty (easy, normal, har
 | A / Left | Turn left |
 | D / Right | Turn right |
 | Q / E | Strafe left / right |
-| F | Use (open doors, find secret walls) |
+| F | Use (open doors, find secret walls, use an arcade cabinet; at the STORE cabinet it opens the store) |
 | Space | Shoot |
-| 1-7 | Select a weapon (only once you have picked it up) |
+| 1-7 | Select a weapon (only once you have bought it) |
+| Z X C V B N | Use a consumable from your stock: **Z** Berserk, **X** Invulnerability, **C** Radiation suit, **V** Medkit, **B** Armor vest, **N** Ammo pack (the HUD hint line lists the ones you have) |
 | Tab | Toggle the minimap |
 | M | Full-screen automap with fog of war (pauses the game; M or P closes it) |
 | P | Pause / resume (the game also pauses by itself when the window loses focus) |
@@ -61,41 +62,50 @@ On the title screen use **Left/Right** to pick the difficulty (easy, normal, har
 | Esc | Quit (with the mouse captured, the first Esc only releases it) |
 
 Weapons: 1 Pistol, 2 Shotgun, 3 Chaingun, 4 Rocket Launcher, 5 Plasma Rifle, 6 BFG 9000, 7 Chainsaw. You start with
-only the pistol. Health, armor, ammo and weapons carry over to the next level. If you die you restart the level with
-what you had when it began.
+only the chainsaw; everything else is bought in the store (see below). Health, armor, ammo and weapons carry over to the next level. If you die you restart the level with
+the loadout your purchases give.
 
 ## The automap (M)
 
 Opens a full-screen map and pauses the game. The outline of the level is always drawn. Rooms stay hidden until you
-have seen them. The exit is always marked, and so are keycards still lying around, even in unexplored areas. Ammo and health show only
-within 16 tiles of you (`AUTOMAP_ITEM_RADIUS`), as a plain `+` (health) or `=` (ammo). Weapons, armor and power-ups are never
-marked, so a big level stays readable. Enemies are never shown. `D` is a door, `K` a locked door, `E` the exit, the arrow is you.
+have seen them. The exit is always marked. Pickups still lying around (a map can still contain them) show as before: keycards always, ammo and health only
+within 16 tiles of you (`AUTOMAP_ITEM_RADIUS`), weapons, armor and power-ups never. Enemies are never shown. `D` is a door, `K` a locked door, `E` the exit, the arrow is you.
 
 ## The first level (E1M1: Hangar)
 
-You start in the south-east in a safe room with the three arcade cabinets (no enemies, some supplies). The route to the exit in
-the far west goes: first hall (blue key) -> blue door -> a small room -> a cave -> the big northern caves. The red key is in the room
-on the north-east side, the yellow key in the room west of the middle, and the exit room is behind the red door and then the
-yellow door. **The level is a roguelike:** the map holds no ordinary enemies, only exploding barrels and one Arch-vile asleep in every
-room (15 of them, each as far from the room's doors as it can be; the start room has none). What you fight is whatever they summon.
+You start in the south-east in a safe room with the three arcade cabinets (no enemies; the store cabinet is here). The route to the exit in
+the far west goes through the blue door, a small room, a cave and the big northern caves; the exit room is behind the red door and then the
+yellow door. The keys no longer lie on the map: buy them in the store. **The level is a roguelike:** the map holds no ordinary enemies, only exploding barrels and one Arch-vile asleep in each of
+the six biggest rooms (as far from the room's doors as it can be). The small rooms have none. What you fight is whatever they summon.
 Every decoration and tile type appears at least once. A dead-end corridor off the east side of the second cave
-leads to a secret wall (press F on it); behind it is a hidden room (its reward is armor). Two nukage pools sit in the first
-hall and the big cave (a radiation suit lies near the first). Two rooms use the brick (`%`) and tech (`&`) wall looks.
-There are no health, ammo or weapon pickups on the map any more (see "Roguelike progression" below); keycards, armor and the power-ups are still
-lying around.
+leads to a secret wall (press F on it); behind it is a hidden room (empty now). Two nukage pools sit in the first
+hall and the big cave (buy a radiation suit in the store). Two rooms use the brick (`%`) and tech (`&`) wall looks.
+The map holds no pickups at all (no health, ammo, weapons, armor, keys or power-ups): everything is in the store (see below).
 
-## Roguelike progression
+## Points and the store
 
-Every time you die and start over, the next run begins stronger: **one more weapon** (you start with only the chainsaw; then the pistol, shotgun, chaingun,
-rocket launcher, plasma rifle and finally the BFG 9000, after which no more are granted), **+10 health** and **more ammo** (the pistol arrives with 100 bullets and gains 25 more per death after that; each other ammo type works the same way from the death its first weapon is unlocked) of every type your weapons use, with no limit on
-health or ammo. The newest weapon is selected. The end screen shows what you get next. Winning does not reset anything: the extra weapons, health and ammo carry on, and you can keep playing.
+Nothing lies around and dying grants nothing. Instead every run earns **points**: when a run ends (you die or reach the exit) its score is banked into your
+points total (the end screen shows `+N POINTS (TOTAL n)`; runs with cheat flags earn none). Spend them at the **third arcade cabinet** (the one with the STORE sign, next
+to the other two in the start room): face it and press F. The game pauses and a panel opens. Left/Right (or A/D) change tab, Up/Down pick an item,
+Enter (or B) buys, Esc closes; or click a tab, a row or its BUY button. Purchases are kept for every later run **and** take effect at once in the run you are in.
+
+| Tab | What it sells |
+|---|---|
+| WEAPONS | pistol, shotgun, chaingun, rocket launcher, plasma rifle, BFG 9000 (each starts with some ammo; you always have the chainsaw) |
+| AMMO | extra starting ammo for each type (+50 bullets, +8 shells, +4 rockets, +40 cells per purchase; the price rises 25% each time) |
+| SURVIVAL | +10 starting health (repeatable), +25 starting armor (up to 4 times) |
+| KEYS | blue, red and yellow keycards: you start every run holding them |
+| ITEMS | consumables kept in stock (up to 9 each) and used in a run with a key: **Z** Berserk (+100 health, double damage 60s), **X** Invulnerability (30s), **C** Radiation suit (60s), **V** Medkit (+25), **B** Armor vest (+50), **N** Ammo pack (refills the weapon in your hands) |
+
+A consumable is only used up when it would do something (not when health is full, the power-up is still running, or the weapon needs no ammo). Prices and items are
+the `STORE` table near the top of `doom.js` (first guesses: tune them to how many points a run earns); the old pickup types in `PICKUPS` still exist and the
+consumables reuse them.
 
 **Run history.** Every run, whether you die or reach the exit, is recorded (result, time, kills, score, and the health and weapons you started with)
 and the end screen shows your last four runs as bars with the best score starred, plus totals and your fastest win. Press `H` on the end screen for
 the full history (the last 16 runs, side by side). Runs played with cheat flags are marked `(cheats)` and never count as a best. The last 200 runs are kept.
 Everything is saved in `doom_progress.txt` (plain JSON text) so it survives closing the script; the web page version keeps it only while the page is open.
-`run doom.js --reset` wipes it all, deaths and history. The numbers are in `PROGRESSION`
-near the top of `doom.js`. The pickups still work if you want them: `a n o p` (ammo), `h` (health) and `2`-`7` (weapons) in `map.txt` as before.
+Your points and purchases are saved there too. `run doom.js --reset` wipes it all: points, purchases, deaths and history. Pickups still work if you want them in a map: `a n o p` (ammo), `h` (health), `r` (armor), `b e w` (keys) and `2`-`7` (weapons) in `map.txt` as before.
 
 ## Map files
 
@@ -138,7 +148,7 @@ ignored.
 | `Y` | Cyberdemon | boss, rockets |
 | `M` | Spider Mastermind | boss, chaingun (a stream of single bullets) |
 | `L` | Pain Elemental | spawner: summons Lost Souls (a fire spike warns where each one will appear) |
-| `V` | Arch-vile | spawner: summons a random enemy (not a zombie, zombie sergeant, lost soul or another Arch-vile: the tanks and the Pain Elemental already make those), with a fire-spike warning. The three tanks count as one entry in its roll (`spawnGroup: 'tank'`): when that entry comes up, one of the three is picked at random. Asleep until you open a door into its room (or see it); from then on it summons non-stop and wanders its room, even when you are far away, and what it summons hunts you for good. **Invulnerable until 20 of its own summons are dead** (a message shows how many are left). |
+| `V` | Arch-vile | spawner: summons a random enemy (not a zombie, zombie sergeant, lost soul or another Arch-vile: the tanks and the Pain Elemental already make those), with a fire-spike warning. The three tanks count as one entry in its roll (`spawnGroup: 'tank'`): when that entry comes up, one of the three is picked at random. It teleports around its room: whenever you come within 7 tiles of it (at most once every 2 seconds), and by itself every 10 seconds or so (`teleport` in its entry). Asleep until you open a door into its room (or see it); from then on it summons non-stop and wanders its room, even when you are far away, and what it summons hunts you for good. **Invulnerable until 20 of its own summons are dead** (a message shows how many are left). |
 
 Summoned enemies count like any other: their points go into your score and they add to your kills (and to the kill total on the end screen). A spawner never has more than a few alive at once (`maxAlive` per spawner: 4 for the Arch-vile, 8 for the Pain Elemental), and `TUNING.maxEnemies` (40) caps all summoned enemies alive together. Each destroyed tank (the zombie, missile and plasma tanks) releases 4 enemies, each randomly a zombie or a zombie sergeant (`onDeath.spawn` with `count: 4`), and those are not capped. To put an ordinary enemy on the map, just use its letter in `map.txt` as before.
 
@@ -163,14 +173,14 @@ Summoned enemies count like any other: their points go into your score and they 
 | `H` `J` `N` | Three different bodies hanging from the ceiling | no, you walk under them |
 | `1` | Bitburner arcade cabinet: face it and press F to open the web version of Bitburner over the game (see below) | yes |
 | `A` | DOOM arcade cabinet: face it and press F to play the original DOS DOOM (shareware episode, from the Internet Archive) in an overlay | yes |
-| `C` | Coming-soon arcade cabinet: placeholder, F says OUT OF ORDER (its game is not built yet) | yes |
+| `C` | STORE arcade cabinet: face it and press F to open the store (see "Points and the store") | yes |
 
 To add your own, copy an entry in `DECORATIONS` in `doom.js` and give it an unused map character. Two options change how
 a decoration looks: `anim: 120` makes it animated (milliseconds per frame, any number of frames, and each copy on the map
 starts at a different point), and `hang: true` hangs it from the ceiling. Decorations stand on the floor by default (bottom edge on the floor line);
-`float: true` leaves one floating at eye level instead. `use: 'terminal'` (opens Bitburner), `use: 'doom'` (opens DOS DOOM) or `use: 'soon'` (OUT OF ORDER) makes a decoration usable with F.
+`float: true` leaves one floating at eye level instead. `use: 'terminal'` (opens Bitburner), `use: 'doom'` (opens DOS DOOM), `use: 'store'` (the store) or `use: 'soon'` (OUT OF ORDER) makes a decoration usable with F.
 
-**The Bitburner cabinet (`1`).** Stand close and face it (a message says PRESS F TO PLAY) and press F: the game pauses
+**The Bitburner cabinet (`1`).** Stand close and face it (a message says PRESS F TO PLAY, or PRESS F TO SHOP at the store) and press F: the game pauses
 and `https://bitburner-official.github.io/` (change it with `TUNING.terminalUrl`) opens in a frame over the page. The
 game ignores the keyboard while it is open, so you can type in Bitburner; close it with Esc or the [X] button
 (Esc typed inside the frame doesn't reach the game, so use the button then). If the page stays blank the site was
@@ -179,7 +189,7 @@ The web version keeps its own save, separate from your Steam one. **The DOOM cab
 of the original DOS DOOM (`TUNING.doomUrl`; the [open in a tab] link goes to its details page). The Archive runs it in an emulator inside
 the frame; click the frame once so it gets the keyboard. The game itself is not stored in this project, only the link. The DOOM page is loaded in a fixed 640x600 frame (`TUNING.doomFrame`; 640 is the width the Archive draws the game at, against the left edge of its frame) and scaled to fit the overlay, so the game is centred instead of sitting in a corner; set `doomFrame: null` to stretch the frame instead. If the frame
 stays blank, use the tab link. All three cabinets are the same flame machine with a different sign and screen. They use `Arcade_Bitburner_idle1`,
-`Arcade_Doom_idle1` and `Arcade_Soon_idle1` (85x170 pixels each, `scale: 0.32` in `DECORATIONS`; picture height x scale
+`Arcade_Doom_idle1` and `Arcade_Store_idle1` (`Arcade_Soon_idle1` is unused now) (85x170 pixels each, `scale: 0.32` in `DECORATIONS`; picture height x scale
 should stay near 54 to keep them about 0.6 of a wall tall).
 
 The first level is `map.txt`. More levels are more map files listed in `LEVELS` near the top of `doom.js`; the exit of
@@ -248,7 +258,7 @@ Use `sprites_reference.md` (every sprite name, the file format and naming rules)
 sprites without reading the whole file).
 
 Each decoration needs an image named `{Type}_idle1`: `Impaled_Body_idle1`, `Skull_Pile_idle1`, `Candelabra_idle1`,
-`Tech_Lamp_idle1`, `Staked_Corpse_idle1`, `Gore_Pole_idle1`, `Arcade_Bitburner_idle1`, `Arcade_Doom_idle1`, `Arcade_Soon_idle1`, `Hanging_Body_1_idle1`, `Hanging_Body_2_idle1`, `Hanging_Body_3_idle1`.
+`Tech_Lamp_idle1`, `Staked_Corpse_idle1`, `Gore_Pole_idle1`, `Arcade_Bitburner_idle1`, `Arcade_Doom_idle1`, `Arcade_Store_idle1`, `Arcade_Soon_idle1`, `Hanging_Body_1_idle1`, `Hanging_Body_2_idle1`, `Hanging_Body_3_idle1`.
 The animated ones (`anim` set) use as many frames as you give them, looped: `Burning_Barrel_idle1`..`3`, `Red_Torch_idle1`..`4`, 
 
 The exploding barrel uses `Barrel_idle1`... (looped while it stands) and `Barrel_death1`... (the explosion frames).

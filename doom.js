@@ -199,28 +199,59 @@ const SOUND_FALLBACKS = {
 // Starting stats and the most you can carry of each
 // Ammo is kept per TYPE (AMMO_TYPES); each weapon names the type it uses in `ammoType`. STAT_MAX caps health and
 // armor; ammo caps are in AMMO_TYPES. Nothing else enforces these caps.
-const START = { health: 100, armor: 0, weapons: ['chainsaw'] };   // weapons you begin with: only the chainsaw (it needs no ammo); the pistol is the first unlock (see PROGRESSION). Starting ammo is AMMO_TYPES[].start
-// ROGUELIKE PROGRESSION. Every time you die and start over you begin the next run a little stronger. `deaths` (how many times
-// you have died; saved in PROGRESS_FILE so it survives closing the script; run with --reset to wipe it) decides the starting loadout:
-//   weapons        one more weapon per death, in this order, until you have them all (then no more are granted)
-//   healthPerDeath extra starting health per death, with no limit (the 100 cap only applies to health pickups)
-//   ammoPerDeath   extra starting ammo of each type for every death AFTER the weapon that uses it was unlocked (so a new weapon starts with
-//                  its base amount, e.g. the pistol's 100 bullets, and grows from there), with no limit
-//   weaponAmmo     starting ammo of a type whose weapon you have unlocked, the amount a new weapon arrives with, before the per-death growth (shells, rockets and cells
-//                  start at 0 otherwise, so a new weapon would be useless)
-const PROGRESSION = {
-  weapons: ['pistol', 'shotgun', 'chaingun', 'rocketlauncher', 'plasmarifle', 'bfg9000'],   // (the chainsaw is in START.weapons)
-  healthPerDeath: 10,
-  ammoPerDeath: { bullets: 25, shells: 4, rockets: 2, cells: 10 },
-  weaponAmmo: { shells: 8, rockets: 4, cells: 40 },
-};
+const START = { health: 100, armor: 0, weapons: ['chainsaw'] };   // what every run begins with: 100 health, no armor, only the chainsaw (it needs no ammo). Everything else is bought in the STORE.
+// ─── STORE ─────────────────────────────────────────────────────────────────
+// Nothing lies around the map any more (no ammo, health, weapons, keys or power-ups) and dying grants nothing. You earn POINTS: when a
+// run ends (death or exit) its score is banked into your points (saved in PROGRESS_FILE). Spend them at the third arcade cabinet (STORE
+// sign, use:'store'): face it and press F. What you buy is kept for every later run AND takes effect immediately in the run you are in.
+// An item is one entry here:
+//   id       unique name, also the key in the saved `buys` (bought count) / `inv` (stock of a consumable)
+//   cat      tab it appears under: WEAPONS | AMMO | SURVIVAL | KEYS | ITEMS (the order of STORE_CATS)
+//   name, desc   shown in the store (weapon / key / ammo items take their name from WEAPONS / KEYS / AMMO_TYPES when `name` is left out)
+//   price    cost of the first purchase; growth = extra fraction of price added per earlier purchase (0.25: 100, 125, 150 ...)
+//   max      most times it can be bought (weapons and keys: 1; tiers: leave out = no limit)
+// What it does (one of):
+//   weapon: id of WEAPONS          you start every run with it (its ammo type starts with AMMO_TYPES[].start rounds, once any weapon of that type is owned)
+//   ammo: type, amount             +amount starting ammo of that type per purchase
+//   health: n / armor: n           +n starting health / armor per purchase
+//   key: id of KEYS                you start every run holding that keycard
+//   pickup: id of PICKUPS          a CONSUMABLE: buying adds one to your stock (max STORE_MAX_STOCK); `hotkey` uses one in the run: it
+//                                  does what the old pickup did (heal, armor, timed power-up from TUNING.powerTicks ...)
+//   ammoPack: true                 a consumable that refills the CURRENT weapon's ammo type by one old ammo pickup's worth
+// The prices below are first guesses: tune them to how many points a run earns.
+const STORE_CATS = ['WEAPONS', 'AMMO', 'SURVIVAL', 'KEYS', 'ITEMS'];
+const STORE_MAX_STOCK = 9;
+const STORE = [
+  { id: 'pistol', cat: 'WEAPONS', weapon: 'pistol', price: 500, desc: 'Starts with 100 bullets' },
+  { id: 'shotgun', cat: 'WEAPONS', weapon: 'shotgun', price: 1500, desc: 'Starts with 8 shells' },
+  { id: 'chaingun', cat: 'WEAPONS', weapon: 'chaingun', price: 3000, desc: 'Fast bullets' },
+  { id: 'rocketlauncher', cat: 'WEAPONS', weapon: 'rocketlauncher', price: 5000, desc: 'Starts with 4 rockets' },
+  { id: 'plasmarifle', cat: 'WEAPONS', weapon: 'plasmarifle', price: 8000, desc: 'Starts with 40 cells' },
+  { id: 'bfg9000', cat: 'WEAPONS', weapon: 'bfg9000', price: 12000, desc: 'Uses cells' },
+  { id: 'ammo_bullets', cat: 'AMMO', ammo: 'bullets', amount: 50, price: 100, growth: 0.25, desc: '+50 starting bullets (pistol, chaingun)' },
+  { id: 'ammo_shells', cat: 'AMMO', ammo: 'shells', amount: 8, price: 150, growth: 0.25, desc: '+8 starting shells (shotgun)' },
+  { id: 'ammo_rockets', cat: 'AMMO', ammo: 'rockets', amount: 4, price: 200, growth: 0.25, desc: '+4 starting rockets (rocket launcher)' },
+  { id: 'ammo_cells', cat: 'AMMO', ammo: 'cells', amount: 40, price: 250, growth: 0.25, desc: '+40 starting cells (plasma rifle, BFG)' },
+  { id: 'health', cat: 'SURVIVAL', name: 'MAX HEALTH', health: 10, price: 200, growth: 0.25, desc: '+10 starting health' },
+  { id: 'armor', cat: 'SURVIVAL', name: 'BODY ARMOR', armor: 25, price: 300, growth: 0.5, max: 4, desc: '+25 starting armor' },
+  { id: 'key_blue', cat: 'KEYS', key: 'blue', price: 400, desc: 'Opens the blue doors' },
+  { id: 'key_red', cat: 'KEYS', key: 'red', price: 1000, desc: 'Opens the red doors' },
+  { id: 'key_yellow', cat: 'KEYS', key: 'yellow', price: 2000, desc: 'Opens the yellow doors' },
+  { id: 'berserk', cat: 'ITEMS', name: 'BERSERK', pickup: 'berserk', hotkey: 'z', price: 400, desc: '+100 health, double damage for 60s' },
+  { id: 'invuln', cat: 'ITEMS', name: 'INVULNERABILITY', pickup: 'invuln', hotkey: 'x', price: 800, desc: 'No damage for 30s' },
+  { id: 'radsuit', cat: 'ITEMS', name: 'RADIATION SUIT', pickup: 'radsuit', hotkey: 'c', price: 300, desc: 'Nukage does not hurt for 60s' },
+  { id: 'medkit', cat: 'ITEMS', name: 'MEDKIT', pickup: 'health', hotkey: 'v', price: 100, desc: '+25 health' },
+  { id: 'vest', cat: 'ITEMS', name: 'ARMOR VEST', pickup: 'armor', hotkey: 'b', price: 200, desc: '+50 armor' },
+  { id: 'ammopack', cat: 'ITEMS', name: 'AMMO PACK', ammoPack: true, hotkey: 'n', price: 150, desc: 'Refills the weapon in your hands' },
+];
 const PROGRESS_FILE = 'doom_progress.txt';
-// Ammo types. start/max are in rounds. A weapon uses one of these ids as its ammoType (null = no ammo needed).
+// Ammo types. start = rounds you begin a run with once you own a weapon that uses it (0 without one); max = what the AMMO PACK and the ammo caps allow; both in rounds.
+// Bought ammo (STORE) comes on top of start. A weapon uses one of these ids as its ammoType (null = no ammo needed).
 const AMMO_TYPES = {
   bullets: { name: 'BULLETS', start: 100, max: 200 },
-  shells: { name: 'SHELLS', start: 0, max: 50 },
-  rockets: { name: 'ROCKETS', start: 0, max: 50 },
-  cells: { name: 'CELLS', start: 0, max: 300 },
+  shells: { name: 'SHELLS', start: 8, max: 50 },
+  rockets: { name: 'ROCKETS', start: 4, max: 50 },
+  cells: { name: 'CELLS', start: 40, max: 300 },
 };
 
 // Difficulty, chosen on the title screen with Left/Right. damageTaken scales everything that hurts the player,
@@ -314,7 +345,7 @@ const MAP_TILES = {
   'P': { tile: 'floor', player: true },                // player start
   'E': { tile: 'exit' },
   'D': { tile: 'door' },
-  'S': { tile: 'secret', reward: { pickup: 'armor', dx: 0, dy: 1 } },  // reward appears 1 tile south (armor: health and ammo no longer lie around, see PROGRESSION)
+  'S': { tile: 'secret' },   // (a `reward: { pickup, dx, dy }` here would drop that pickup behind it; unused now that the STORE replaces pickups)
 };
 
 // ─── KEYS ───────────────────────────────────────────────────────────────────
@@ -433,8 +464,8 @@ const PICKUPS = {
 //            doesn't flicker in step.
 //   use      what pressing F does when you stand close, facing it (within TUNING.terminalRange). 'terminal' opens
 //            TUNING.terminalUrl (the web version of Bitburner) in an overlay and pauses the game; 'doom' does the same with
-//            TUNING.doomUrl (the original DOS DOOM, shareware episode). 'soon' just shows
-//            OUT OF ORDER (the cabinet's game is not built yet). A message tells you to press F when you are in range.
+//            TUNING.doomUrl (the original DOS DOOM, shareware episode). 'store' opens the STORE (see STORE).
+//            'soon' just shows OUT OF ORDER (unused now). A message tells you to press F when you are in range.
 //   glyph / blob   ASCII stand-in used until art exists: glyph [tag, char] is one character on the floor, blob
 //            { tag, chars, size } is a small ASCII shape in the air (same format as PROJECTILES blob)
 // Art: "<Type>_idle1" in sprites.json (plus idle2, idle3 ... if it is animated, any number of frames), where Type is
@@ -459,7 +490,7 @@ const DECORATIONS = {
   // body with their own sign and screen (sprites to convert/make_cab.py builds them).
   ARCADEBITBURNER: { mapChar: '1', solid: true, radius: 0.4, scale: 0.32, use: 'terminal', blob: { tag: '\x1D', chars: '#[=:.', size: 0.3 } },   // opens the web Bitburner
   ARCADEDOOM: { mapChar: 'A', solid: true, radius: 0.4, scale: 0.32, use: 'doom', blob: { tag: '\x16', chars: '#[=:.', size: 0.3 } },   // opens the original DOS DOOM
-  ARCADESOON: { mapChar: 'C', solid: true, radius: 0.4, scale: 0.32, use: 'soon', blob: { tag: '\x19', chars: '#[=:.', size: 0.3 } },   // placeholder: not built yet
+  ARCADESTORE: { mapChar: 'C', solid: true, radius: 0.4, scale: 0.32, use: 'store', blob: { tag: '\x19', chars: '#[=:.', size: 0.3 } },   // opens the STORE (Arcade_Store_idle1)
   // Hanging from the ceiling (walk under them)
   HANGINGBODY1: { mapChar: 'H', solid: false, hang: true, scale: 0.92, blob: { tag: '\x18', chars: '|#:.', size: 0.3 } },   // Hanging_Body_1_idle1
   HANGINGBODY2: { mapChar: 'J', solid: false, hang: true, scale: 0.86, blob: { tag: '\x18', chars: '|#:.', size: 0.3 } },   // Hanging_Body_2_idle1
@@ -589,6 +620,9 @@ const PROJECTILES = {
 //                wandering about near where it started, even when you are far away. It becomes active when it sees you or, with
 //                wakeOnDoor, when you open a door into its room (that is how the Arch-viles work). `wanderSpeed` = tiles per tick
 //                while wandering (default: its normal speed). Whatever it summons hunts you for good (it knows where you are).
+//  teleport      { dist, cooldown, idle, minPlayer } the enemy blinks to another spot in its room (somewhere it can see, within `roam` of where
+//                it started, at least `minPlayer` tiles from you and 4 from where it was): whenever it can see you closer than `dist` tiles, and also by itself every
+//                `idle` ticks once it is active (0 = never), but never twice within `cooldown` ticks. Stops it being cornered and shuffling.
 //  invulnerable  { kills: N } = takes no damage until N of the enemies IT summoned have been killed (shown on screen). Used by the Arch-vile.
 //  relentless    true = while it is hunting (memory not expired) and can't see you, it finds a route to where you are
 //                NOW, not just where you were last seen. Without it, it finds a route to the remembered spot.
@@ -803,12 +837,12 @@ const ENEMIES = {
   },
   ARCHVILE: {
     mapChar: 'V', hp: 40, points: 1000, killMsg: '** ARCH-VILE BANISHED **',
-    // The heart of the roguelike level: one sits in every room, asleep, as far from the door as it can be. Opening a door into its room
+    // The heart of the roguelike level: one sits in each of the six biggest rooms, asleep, as far from the door as it can be. Opening a door into its room
     // (wakeOnDoor) makes it ACTIVE (summoner): it summons a random enemy from anywhere in the game again and again and wanders its room,
     // even when you are far away. It cannot be hurt until 20 of its summons have been killed (invulnerable). Keeps its distance
     // (stopDistance) and flees when you come close. spawnable: false so it can never summon another Arch-vile.
     speed: 0.03, wanderSpeed: 0.05, sight: 20, roam: 25, hitbox: 0.7, painChance: 0.1, stopDistance: 9, flee: { dist: 7, ticks: 70, speed: 0.12 }, relentless: true, spawnable: false,
-    wakeOnDoor: true, summoner: true, invulnerable: { kills: 20 },
+    wakeOnDoor: true, summoner: true, invulnerable: { kills: 20 }, teleport: { dist: 7, cooldown: 50, idle: 250, minPlayer: 8 },
     render: { zoom: 3.1, fall: 1.0 },
     blob: { tag: '\x19', chars: '@O*.', size: 0.6 },
     sounds: { hurt: 'archvileinjured', death: 'archviledeath' },
@@ -895,14 +929,14 @@ export async function main(ns) {
   //   --infiniteammo  weapons never run out of ammo
   //   --allweapons    start with every weapon and full ammo
   //   --noautoswitch  don't switch weapon automatically when the current one runs dry
-  //   --reset         forget your deaths and run history: start the roguelike progression (extra weapons, health and ammo) from zero
+  //   --reset         forget your points, store purchases, deaths and run history: start from zero
   //   --help          print this list and quit
   // Flags are read by ns.flags (the only way settings enter the game). A flag that isn't in FLAG_SCHEMA is reported and
   // ignored. If ns.flags is missing (some web-page converters) every flag is simply off.
   const FLAG_SCHEMA = [['help', false], ['godmode', false], ['infiniteammo', false], ['allweapons', false], ['noautoswitch', false], ['reset', false]];
   const flags = typeof ns.flags === 'function' ? ns.flags(FLAG_SCHEMA) : Object.fromEntries(FLAG_SCHEMA);
   if (flags.help) {
-    ns.tprint('doom.js flags:  --godmode (no damage)  --infiniteammo  --allweapons (every weapon, full ammo)  --noautoswitch (no automatic weapon switch)  --reset (forget your deaths, run history and the bonuses)  --help');
+    ns.tprint('doom.js flags:  --godmode (no damage)  --infiniteammo  --allweapons (every weapon, full ammo)  --noautoswitch (no automatic weapon switch)  --reset (forget your points, purchases, deaths and run history)  --help');
     return;
   }
   const unknownFlags = Object.keys(flags).filter(k => k !== '_' && !FLAG_SCHEMA.some(f => f[0] === k)).map(k => `--${k}`).concat((flags._ || []).map(String));
@@ -910,29 +944,34 @@ export async function main(ns) {
   const INFINITE_HEALTH = !!flags.godmode;
   const INFINITE_AMMO = !!flags.infiniteammo;
   const ALL_WEAPONS = !!flags.allweapons;
-  // SAVED PROGRESS (PROGRESS_FILE, JSON text): `deaths` (see PROGRESSION) and `runs`, the history of every run you have finished, which keeps
+  // SAVED PROGRESS (PROGRESS_FILE, JSON text): `deaths`, `points` (banked score to spend in the STORE), `buys` (STORE id -> times bought), `inv` (STORE id -> consumables in stock) and `runs`, the history of every run you have finished, which keeps
   // growing after you win (only the last MAX_RUNS are kept). A run is one attempt, ended by dying or by reaching the exit; each entry is
   //   { n: run number, r: 'DIED' | 'WON', lv: level, t: seconds, k: kills, kt: kill total, sc: score, hp: health you started with,
   //     w: weapons you started with, ch: true if cheat flags were on }
   // Read at start, written whenever a run ends. A missing or unreadable file means a fresh start; an older file holding just a number
   // is read as the death count. The end screen shows the last few runs as bars, and H opens the full history (see historyLines).
-  let deaths = 0, runs = [];
+  let deaths = 0, runs = [], points = 0, buys = {}, inv = {};
+  const cleanCounts = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).map(([k, v]) => [k, Math.max(0, Math.floor(Number(v)) || 0)]).filter(([k, v]) => v > 0 && STORE.some(i => i.id === k)));
   if (!flags.reset) {
     try {
       const raw = String(ns.read(PROGRESS_FILE) || '').trim();
       if (raw.startsWith('{')) {
         const o = JSON.parse(raw);
         deaths = Math.max(0, Math.floor(Number(o.deaths)) || 0);
+        points = Math.max(0, Math.floor(Number(o.points)) || 0); buys = cleanCounts(o.buys); inv = cleanCounts(o.inv);
         runs = Array.isArray(o.runs) ? o.runs.filter(x => x && typeof x === 'object' && Number.isFinite(x.sc) && Number.isFinite(x.t)) : [];
       } else deaths = Math.max(0, parseInt(raw, 10) || 0);
-    } catch (e) { deaths = 0; runs = []; }
+    } catch (e) { deaths = 0; runs = []; points = 0; buys = {}; inv = {}; }
   }
   const MAX_RUNS = 200;
   const CHEATING = INFINITE_HEALTH || INFINITE_AMMO || ALL_WEAPONS;
-  const saveProgress = () => { try { ns.write(PROGRESS_FILE, JSON.stringify({ deaths, runs: runs.slice(-MAX_RUNS) }), 'w'); } catch (e) { } };
+  const saveProgress = () => { try { ns.write(PROGRESS_FILE, JSON.stringify({ deaths, points, buys, inv, runs: runs.slice(-MAX_RUNS) }), 'w'); } catch (e) { } };
   if (flags.reset) saveProgress();
   // Adds the run that just ended (result 'DIED' or 'WON') to the history and saves it. Call once, after endTime and score are final.
+  let bankedScore = 0;   // how much of the current `score` is already in `points` (the score carries over between levels of one run, so only the new part is banked)
+  let lastGain = 0;      // points the last recordRun() banked (shown on the end screen)
   function recordRun(result) {
+    lastGain = CHEATING ? 0 : Math.max(0, score - bankedScore); bankedScore = score; points += lastGain;   // (cheat flags earn no points)
     const t = Math.max(0, Math.floor(((endTime || Date.now()) - gameStartTime) / 1000));
     runs.push({ n: (runs.length ? runs[runs.length - 1].n : 0) + 1, r: result, lv: LEVELS[levelIndex].name.split(':')[0], t, k: kills, kt: countLevelEnemies(),
       sc: score, hp: Math.round(levelStart?.health ?? health), w: levelStart?.owned.length ?? owned.size, ch: CHEATING || undefined });
@@ -945,7 +984,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '91';
+  const VERSION = '94';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1345,7 +1384,7 @@ export async function main(ns) {
 
   // Re-steal focus any time the user clicks anywhere in the document,
   // in case the terminal or another element grabs it mid-game.
-  const refocusHandler = () => { if (running && !terminalEl) root.focus(); };
+  const refocusHandler = () => { if (running && !terminalEl && !storeEl) root.focus(); };
   doc.addEventListener('click', refocusHandler);
 
   // ─── INPUT ──────────────────────────────────────────────────────────────────
@@ -1358,7 +1397,7 @@ export async function main(ns) {
   // Letters are normalised to lowercase so Shift/CapsLock can't leave a key "stuck" down.
   const normKey = k => (k.length === 1 ? k.toLowerCase() : k);
   const BLOCKED_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ',
-    'w', 'a', 's', 'd', 'q', 'e', 'f', 'p', 'm', 'Tab', 'Escape', ...Object.keys(WEAPON_KEYS)]);
+    'w', 'a', 's', 'd', 'q', 'e', 'f', 'p', 'm', 'Tab', 'Escape', ...Object.keys(WEAPON_KEYS), ...STORE.filter(i => i.hotkey).map(i => i.hotkey)]);
   // Pause: P toggles it, and losing window focus turns it on (so enemies can't kill you while you are in another
   // tab). Only meaningful during play (inGame, set by the frame loop). While paused the frame loop skips updateGame
   // and just redraws with a PAUSED message; the elapsed pause time is added to gameStartTime so the clock ignores it.
@@ -1434,14 +1473,129 @@ export async function main(ns) {
     if (terminalResume) setPaused(false);
     root.focus();
   }
+  // ── CONSUMABLES ──────────────────────────────────────────────────────────────
+  // Uses one item of the STORE (a `hotkey` item: pickup or ammoPack) from your stock `inv`. It does what the old map pickup did, through
+  // collectPickup(). Nothing is used up when it would do nothing (health already full, power-up still running, no ammo needed).
+  function useItem(item) {
+    const label = item.name[0] + item.name.slice(1).toLowerCase();
+    if (!(inv[item.id] > 0)) { flash(`NO ${item.name} LEFT`, 20); return; }
+    let def;
+    if (item.ammoPack) {
+      const t = WEAPONS[currentWeapon].ammoType;
+      def = t && Object.values(PICKUPS).find(p => p.give.ammo?.[t]);
+      if (!def) { flash('THIS WEAPON NEEDS NO AMMO', 20); return; }
+    } else def = PICKUPS[item.pickup];
+    if (def.power && powers[def.power] > 0) { flash(`${label.toUpperCase()} ALREADY ACTIVE`, 20); return; }
+    if (!pickupUseful(def)) { flash(`NO NEED FOR ${item.name}`, 20); return; }
+    inv[item.id]--;
+    collectPickup(def);
+    saveProgress();
+  }
+
+  // ── STORE OVERLAY ────────────────────────────────────────────────────────────
+  // openStore() (the STORE cabinet, use:'store') lays a panel over the game and pauses it, like openTerminal. Tabs are STORE_CATS.
+  // Keys: Left/Right tab, Up/Down item, Enter/Space/B buy, Esc close; or click a tab, a row or its BUY button. Buying spends
+  // `points`, saves, and applies at once (buyItem). storeSel is the selected row of the current tab; storeMsg the last result.
+  let storeEl = null, storeResume = false, storeTab = 0, storeSel = 0, storeMsg = '';
+  const storeItems = () => STORE.filter(i => i.cat === STORE_CATS[storeTab]);
+  const itemName = i => i.name || (i.weapon ? WEAPONS[i.weapon]?.name : i.key ? KEYS[i.key].name : i.ammo ? AMMO_TYPES[i.ammo].name : i.id.toUpperCase());
+  const itemPrice = i => Math.round(i.price * (1 + (i.growth || 0) * bought(i.id)));
+  const itemMax = i => i.max ?? (i.weapon || i.key ? 1 : i.hotkey ? STORE_MAX_STOCK : Infinity);
+  const itemCount = i => (i.hotkey ? inv[i.id] : bought(i.id)) || 0;
+  function buyItem(item) {
+    if (itemCount(item) >= itemMax(item)) { storeMsg = item.hotkey ? 'STOCK FULL' : 'ALREADY OWNED'; return; }
+    const price = itemPrice(item);
+    if (points < price) { storeMsg = `NEED ${price - points} MORE POINTS`; return; }
+    points -= price;
+    if (item.hotkey) inv[item.id] = (inv[item.id] || 0) + 1;
+    else buys[item.id] = bought(item.id) + 1;
+    // apply it to the run in progress too
+    if (item.weapon && WEAPONS[item.weapon]) {
+      const t = WEAPONS[item.weapon].ammoType;
+      if (t && ![...owned].some(id => WEAPONS[id].ammoType === t)) ammo[t] += AMMO_TYPES[t].start;
+      owned.add(item.weapon); currentWeapon = item.weapon;
+    }
+    if (item.ammo) ammo[item.ammo] += item.amount;
+    if (item.health) health += item.health;
+    if (item.armor) armor += item.armor;
+    if (item.key) heldKeys.add(item.key);
+    saveProgress();
+    play(SOUNDS.weaponPickup, 0.8);
+    storeMsg = `BOUGHT ${itemName(item)}`;
+    updateHud();
+  }
+  function renderStore() {
+    if (!storeEl) return;
+    const items = storeItems();
+    storeSel = Math.max(0, Math.min(storeSel, items.length - 1));
+    const tabs = STORE_CATS.map((c, n) => `<span data-tab="${n}" style="cursor:pointer;padding:3px 10px;margin-right:6px;border:1px solid #0a0;${n === storeTab ? 'background:#0a0;color:#000;' : ''}">${c}</span>`).join('');
+    const rows = items.map((i, n) => {
+      const cnt = itemCount(i), full = cnt >= itemMax(i), can = !full && points >= itemPrice(i);
+      const have = i.hotkey ? `STOCK ${cnt}  [${i.hotkey.toUpperCase()}]` : itemMax(i) === 1 ? (cnt ? 'OWNED' : '') : cnt ? `LEVEL ${cnt}` : '';
+      const price = full ? (i.hotkey ? 'FULL' : 'SOLD') : itemPrice(i);
+      return `<div data-row="${n}" style="display:flex;align-items:center;gap:10px;padding:6px 8px;margin:3px 0;cursor:pointer;border:1px solid ${n === storeSel ? '#6f6' : '#031'};background:${n === storeSel ? '#041' : 'transparent'};">` +
+        `<span style="width:190px;color:#fff">${itemName(i)}</span><span style="flex:1;color:#8c8">${i.desc || ''}</span>` +
+        `<span style="width:120px;color:#fc4">${have}</span><span style="width:70px;text-align:right;color:${can ? '#ff0' : '#a55'}">${price}</span>` +
+        `<span data-buy="${n}" style="padding:2px 10px;border:1px solid ${can ? '#0f0' : '#333'};color:${can ? '#0f0' : '#444'}">BUY</span></div>`;
+    }).join('');
+    storeEl.innerHTML = `<div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #0a0"><span style="color:#fc4">ARCADE STORE</span>` +
+      `<span>POINTS: <span style="color:#ff0">${points}</span> <span data-close="1" style="cursor:pointer;margin-left:20px">[X] CLOSE (Esc)</span></span></div>` +
+      `<div style="padding:10px 12px">${tabs}</div><div style="flex:1;overflow:auto;padding:0 12px">${rows}</div>` +
+      `<div style="padding:8px 12px;border-top:1px solid #0a0;color:#8c8">${storeMsg || 'Left/Right: tab   Up/Down: item   Enter: buy   Esc: close'}</div>`;
+  }
+  function storeKey(k) {
+    const items = storeItems();
+    if (k === 'Escape') closeStore();
+    else if (k === 'ArrowRight' || k === 'd') { storeTab = (storeTab + 1) % STORE_CATS.length; storeSel = 0; storeMsg = ''; }
+    else if (k === 'ArrowLeft' || k === 'a') { storeTab = (storeTab + STORE_CATS.length - 1) % STORE_CATS.length; storeSel = 0; storeMsg = ''; }
+    else if (k === 'ArrowDown' || k === 's') { storeSel = Math.min(items.length - 1, storeSel + 1); storeMsg = ''; }
+    else if (k === 'ArrowUp' || k === 'w') { storeSel = Math.max(0, storeSel - 1); storeMsg = ''; }
+    else if (k === 'Enter' || k === ' ' || k === 'b') { if (items[storeSel]) buyItem(items[storeSel]); }
+    renderStore();
+  }
+  function openStore() {
+    if (storeEl || terminalEl) return;
+    storeResume = !paused;
+    setPaused(true);
+    for (const k in keys) keys[k] = false;
+    try { doc.exitPointerLock?.(); } catch (e) { }
+    storeEl = doc.createElement('div');
+    storeEl.style.cssText = 'position:fixed;top:30px;left:10%;width:80%;height:calc(100% - 60px);z-index:100000;background:#000;' +
+      'border:2px solid #0a0;box-shadow:0 0 40px #030;display:flex;flex-direction:column;font:bold 14px monospace;color:#0f0;';
+    storeEl.addEventListener('click', e => {
+      const t = e.target.closest('[data-buy],[data-row],[data-tab],[data-close]');
+      if (!t) return;
+      const items = storeItems();
+      if (t.dataset.close) return closeStore();
+      if (t.dataset.tab !== undefined) { storeTab = +t.dataset.tab; storeSel = 0; storeMsg = ''; }
+      else if (t.dataset.buy !== undefined) { storeSel = +t.dataset.buy; if (items[storeSel]) buyItem(items[storeSel]); }
+      else storeSel = +t.dataset.row;
+      renderStore();
+    });
+    doc.body.appendChild(storeEl);
+    storeMsg = '';
+    renderStore();
+  }
+  function closeStore() {
+    if (!storeEl) return;
+    storeEl.remove(); storeEl = null;
+    for (const k in keys) keys[k] = false;
+    if (storeResume) setPaused(false);
+    root.focus();
+  }
   function onKey(e) {
     const k = normKey(e.key);
     if (terminalEl) {   // the overlay owns the keyboard: only Escape (close it) is ours
       if (e.type === 'keydown' && k === 'Escape') closeTerminal();
       return;
     }
+    if (storeEl) {      // the store overlay owns the keyboard too (storeKey)
+      if (e.type === 'keydown') { storeKey(k); e.preventDefault(); }
+      return;
+    }
     if (e.type === 'keydown') {
       keys[k] = true;
+      if (!e.repeat && inGame && !gameOver && !won && !paused) { const it = STORE.find(i => i.hotkey === k); if (it) useItem(it); }   // consumables (see STORE)
       if (k === 'Escape') running = false;
       if (k === 'p' && !e.repeat && inGame && !gameOver && !won) { if (automapOpen) closeAutomap(); else setPaused(!paused); }
       if (k === 'm' && !e.repeat && inGame && !gameOver && !won) toggleAutomap();
@@ -1462,7 +1616,7 @@ export async function main(ns) {
   const onMouseDown = e => { if (doc.pointerLockElement === root && e.button === 0) keys['mouse0'] = true; };
   const onMouseUp = e => { if (e.button === 0) keys['mouse0'] = false; };
   root.addEventListener('click', () => {
-    if (!TUNING.mouseLook || !running || terminalEl || doc.pointerLockElement === root || !root.requestPointerLock) return;
+    if (!TUNING.mouseLook || !running || terminalEl || storeEl || doc.pointerLockElement === root || !root.requestPointerLock) return;
     try { const p = root.requestPointerLock(); if (p && p.catch) p.catch(() => { }); } catch (e) { }
   });
   doc.addEventListener('mousemove', onMouseMove);
@@ -1486,6 +1640,7 @@ export async function main(ns) {
     try { musicSrc?.stop(); } catch (e) { }
     try { audioCtx.close(); } catch (e) { }
     try { terminalEl?.remove(); } catch (e) { }
+    try { storeEl?.remove(); } catch (e) { }
     root.remove();
     doc.removeEventListener('keydown', onKey);
     doc.removeEventListener('keyup', onKey);
@@ -1526,7 +1681,8 @@ export async function main(ns) {
       if (html !== lastKeyHtml) { hudEl.key.style.color = '#aaa'; hudEl.key.innerHTML = html; lastKeyHtml = html; }
     }
     const hint = Object.values(WEAPONS).filter(w => owned.has(w.id)).sort((a, b) => a.key.localeCompare(b.key))
-      .map(w => `${w.key}=${w.name[0]}${w.name.slice(1).toLowerCase()}`).join(' ') + ' • WASD • F Use • Tab Minimap • M Map';
+      .map(w => `${w.key}=${w.name[0]}${w.name.slice(1).toLowerCase()}`).join(' ') + ' • WASD • F Use • Tab Minimap • M Map' +
+      STORE.filter(i => i.hotkey && inv[i.id] > 0).map(i => ` • ${i.hotkey.toUpperCase()} ${i.name[0]}${i.name.slice(1).toLowerCase()} x${inv[i.id]}`).join('');
     if (hint !== lastHint) { hudEl.hint.textContent = hint; lastHint = hint; }
     hudEl.pos.textContent = `X:${px.toFixed(1)} Y:${py.toFixed(1)}`;
   }
@@ -1554,11 +1710,11 @@ export async function main(ns) {
 
   function collectPickup(def) {
     const g = def.give;
-    if (g.health) health = Math.min(Math.max(STAT_MAX.health, health), health + g.health);   // (health above the cap from the roguelike bonus is kept)
+    if (g.health) health = Math.min(Math.max(STAT_MAX.health, health), health + g.health);   // (health above the cap from store purchases is kept)
     if (g.armor) armor = Math.min(Math.max(STAT_MAX.armor, armor), armor + g.armor);
     if (g.ammo) {
       const scale = DIFFICULTIES[difficulty].ammoPickup;
-      for (const [type, n] of Object.entries(g.ammo)) ammo[type] = Math.min(Math.max(AMMO_TYPES[type].max, ammo[type]), ammo[type] + Math.round(n * scale));   // (ammo above the cap from the roguelike bonus is kept)
+      for (const [type, n] of Object.entries(g.ammo)) ammo[type] = Math.min(Math.max(AMMO_TYPES[type].max, ammo[type]), ammo[type] + Math.round(n * scale));   // (ammo above the cap from store purchases is kept)
     }
     if (g.key) heldKeys.add(g.key);
     if (def.power) powers[def.power] = TUNING.powerTicks[def.power];
@@ -1609,7 +1765,7 @@ export async function main(ns) {
     if (health <= 0) {
       gameOver = true;
       endTime = Date.now();
-      recordRun('DIED'); deaths++; saveProgress();   // the next run starts stronger (see PROGRESSION)
+      recordRun('DIED'); deaths++; saveProgress();   // the run's score is banked as points (recordRun); nothing else is granted
       flash('YOU DIED', 9999);
       play(SOUNDS.death, 1.0);
     }
@@ -2072,6 +2228,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       const use = DECORATIONS[dec.type].use;
       if (use === 'terminal') openTerminal();
       else if (use === 'doom') openTerminal(TUNING.doomUrl, 'DOOM (DOS shareware, Internet Archive)', TUNING.doomUrl.replace('/embed/', '/details/'), TUNING.doomFrame);
+      else if (use === 'store') openStore();
       else if (use === 'soon') flash('OUT OF ORDER - COMING SOON', 40);
       return;
     }
@@ -2939,6 +3096,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       [`  Kills:   ${kills} / ${countLevelEnemies()}         `, '#aaa'],
       [`  Secrets: ${secretsFound} / ${secretsTotal}                `, '#aaa'],
       [`  Score:   ${score}                `, '#ff0'],
+      [`  +${lastGain} POINTS  (TOTAL ${points})  `, '#da4'],
       ['', null],
       ['  ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★  ', '#ff0'],
       ['', null],
@@ -2956,7 +3114,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       [`  Secrets: ${secretsFound} / ${secretsTotal}                `, '#666'],
       [`  Score:   ${score}                `, '#666'],
       ['', null],
-      [`  Next run: ${deaths <= PROGRESSION.weapons.length && WEAPONS[PROGRESSION.weapons[deaths - 1]] ? '+' + WEAPONS[PROGRESSION.weapons[deaths - 1]].name + '  ' : ''}+${PROGRESSION.healthPerDeath} HEALTH  +AMMO  `, '#a44'],
+      [`  +${lastGain} POINTS  (TOTAL ${points}) - SPEND AT THE STORE  `, '#da4'],
       ['', null],
       ['  ██████████████████████████████  ', '#600'],
       ['', null],
@@ -3309,7 +3467,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       alive: true, deathFrame: -1, isAttacking: false, attackTimer: 0,
       memX: 0, memY: 0, memTicks: 0, pain: 0, side: Math.random() < 0.5 ? 1 : -1,
       path: null, pathI: 0, pathGoal: -1, pathAge: 99, stuck: 0, lastX: x, lastY: y,
-      spawned: false, kids: [], parent: null, kidKills: 0, active: false, hunt: false, wanderAng: 0, wanderTicks: 0,
+      spawned: false, kids: [], parent: null, kidKills: 0, active: false, hunt: false, wanderAng: 0, wanderTicks: 0, tpCool: 0, tpIdle: 0,
     };
   }
   // The kill total shown on the end screen: enemies placed in the map plus every enemy summoned so far (barrels don't count).
@@ -3507,6 +3665,11 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     // heard a shot) it keeps walking to the last recorded spot until memTicks runs out or it gets there.
     const sees = dist < def.sight && los();
     if (sees) { e.memX = px; e.memY = py; e.memTicks = TUNING.alertMemoryTicks; if (def.summoner) e.active = true; }
+    if (def.teleport && e.alive) {   // blink away when you get close (or now and then on its own)
+      if (e.tpCool > 0) e.tpCool--;
+      const idleHop = e.active && def.teleport.idle > 0 && ++e.tpIdle >= def.teleport.idle;
+      if (e.tpCool <= 0 && ((sees && dist < def.teleport.dist) || idleHop)) teleportEnemy(e, def);
+    }
     const roaming = def.summoner && e.active;   // an active summoner never goes after you: it wanders and summons (and flees when you are close)
     const spd = typeof def.speed === 'function' ? def.speed(e) : def.speed;
     const spawnDist = Math.hypot(e.x - e.spawnX, e.y - e.spawnY);
@@ -3547,6 +3710,26 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       if (Math.random() >= atk.chance * aggression || (!anywhere && !los())) continue;
       enemyAttack(e, atk);
     }
+  }
+  // Blinks `e` to a random legal spot (see the `teleport` legend): within def.roam of its home, in view of where it stands now, free
+  // of walls, solid decorations and other enemies, and at least teleport.minPlayer tiles from the player. Tries 30 random spots; if
+  // none fits it tries again in 10 ticks. A fire-spike flash and the spawn sound mark both ends.
+  function teleportEnemy(e, def) {
+    const tp = def.teleport;
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random() * TAU, d = 2 + Math.random() * Math.max(0, def.roam - 2);
+      const x = e.spawnX + Math.cos(a) * d, y = e.spawnY + Math.sin(a) * d;
+      if (Math.hypot(x - px, y - py) < tp.minPlayer || Math.hypot(x - e.x, y - e.y) < 4 || !spawnSpotFree(x, y, def.radius, e)) continue;   // (and a real hop, not a shuffle)
+      for (const [fx, fy] of [[e.x, e.y], [x, y]]) {
+        effects.push({ x: fx, y: fy, ttl: 10, sprite: 'SPAWNWARNING', ground: true, scale: 2.5, cycle: framesFor('SPAWNWARNING', 'idle')?.length || 0,
+          anim: 'idle', blob: { tag: '\x19', chars: '^*+.', size: 0.5 } });
+        playAt(SOUNDS.spawn, fx, fy, 0.9);
+      }
+      e.x = x; e.y = y; e.path = null; e.fleeTicks = 0; e.wanderTicks = 0; e.tpCool = tp.cooldown; e.tpIdle = 0;
+      return true;
+    }
+    e.tpCool = 10;
+    return false;
   }
   // An active summoner's idle movement: walk in a random direction for a second or two, pick another when something is in the
   // way, and head back toward where it started once it gets far from it (def.roam * 0.8).
@@ -3619,7 +3802,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     if (useKey && !prevUseKey && useCooldown <= 0) { tryUse(); useCooldown = 12; }
     prevUseKey = useKey;
     if (useCooldown > 0) useCooldown--;
-    if (flashTimer <= 0 && usableDecorAhead()) flash('PRESS F TO PLAY', 3);
+    if (flashTimer <= 0 && usableDecorAhead()) flash(DECORATIONS[usableDecorAhead().type].use === 'store' ? 'PRESS F TO SHOP' : 'PRESS F TO PLAY', 3);
     updateDoors();
     if (keys[' '] || keys['mouse0']) shoot();
     if (shootCooldown > 0) shootCooldown--;
@@ -3751,28 +3934,27 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   //   'retry'  restore the loadout the current level started with (levelStart)
   // It parses the map, then resets everything that belongs to a single level. If you add per-level state
   // anywhere in this file, reset it here, or it will leak from one level into the next.
-  // The loadout a run starts with: START plus the roguelike bonuses for `deaths` (see PROGRESSION). The newest unlocked weapon is
-  // selected, and every ammo type a weapon you own uses starts with its base amount plus the per-death growth.
+  // The loadout a run starts with: START plus everything bought in the STORE (buys): bought weapons, +health / +armor tiers, and for every
+  // ammo type a bought weapon uses, AMMO_TYPES[].start plus the bought ammo. The newest bought weapon is selected. Keycards are added in startLevel().
+  const bought = id => buys[id] || 0;
   function resetLoadout() {
-    const unlocked = PROGRESSION.weapons.slice(0, deaths).filter(id => WEAPONS[id]);
-    const ids = ALL_WEAPONS ? Object.keys(WEAPONS) : [...START.weapons, ...unlocked];
-    health = START.health + deaths * PROGRESSION.healthPerDeath; armor = START.armor;
-    // the death count at which a weapon became yours (0 = from the start): ammo grows only for the deaths after its type's first weapon
-    const unlockedAt = id => START.weapons.includes(id) ? 0 : PROGRESSION.weapons.filter(w => WEAPONS[w]).indexOf(id) + 1;
+    const gotWeapons = STORE.filter(i => i.weapon && bought(i.id)).map(i => i.weapon).filter(id => WEAPONS[id]);
+    const ids = ALL_WEAPONS ? Object.keys(WEAPONS) : [...START.weapons, ...gotWeapons];
+    health = START.health; armor = START.armor;
+    for (const i of STORE) { health += (i.health || 0) * bought(i.id); armor += (i.armor || 0) * bought(i.id); }
     for (const t in AMMO_TYPES) {
-      const users = ids.filter(id => WEAPONS[id].ammoType === t), base = AMMO_TYPES[t].start;
-      const since = users.length ? Math.min(...users.map(unlockedAt)) : 0;
+      const users = ids.filter(id => WEAPONS[id].ammoType === t);
       ammo[t] = ALL_WEAPONS ? AMMO_TYPES[t].max
-        : users.length ? base + (base ? 0 : PROGRESSION.weaponAmmo[t] ?? 0) + Math.max(0, deaths - since) * (PROGRESSION.ammoPerDeath[t] ?? 0) : base;
+        : users.length ? AMMO_TYPES[t].start + STORE.filter(i => i.ammo === t).reduce((n, i) => n + i.amount * bought(i.id), 0) : 0;
     }
     owned.clear();
     for (const id of ids) owned.add(id);
-    currentWeapon = (!ALL_WEAPONS && unlocked.length ? unlocked[unlocked.length - 1] : [...owned][0]) ?? Object.keys(WEAPONS)[0];
+    currentWeapon = (!ALL_WEAPONS && gotWeapons.length ? gotWeapons[gotWeapons.length - 1] : [...owned][0]) ?? Object.keys(WEAPONS)[0];
   }
 
   function startLevel(index, mode) {
-    if (mode === 'fresh') { resetLoadout(); score = 0; }
-    else if (mode === 'retry') { resetLoadout(); score = levelStart?.score ?? 0; }   // a new run: the roguelike loadout for the deaths so far
+    if (mode === 'fresh') { resetLoadout(); score = 0; bankedScore = 0; }
+    else if (mode === 'retry') { resetLoadout(); score = levelStart?.score ?? 0; bankedScore = score; }   // a new run: the loadout from the store purchases
     levelIndex = index;
     parseMap(index);
     automapOpen = false;
@@ -3780,6 +3962,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
 
     px = spawns.player.x; py = spawns.player.y; pa = -Math.PI / 2;
     heldKeys.clear();
+    for (const i of STORE) if (i.key && bought(i.id)) heldKeys.add(i.key);   // bought keycards
     for (const k in powers) powers[k] = 0;
     kills = 0; summonedTotal = 0; secretsFound = 0;
     shootCooldown = 0; useCooldown = 0; muzzleFlash = 0; afterglow = 0; faceHitTimer = 0; hazardTimer = 0; mouseTurn = 0; freezeGrace = 0;
@@ -3798,8 +3981,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     for (const d of spawns.decor) decor.push({ ...d, solid: !!DECORATIONS[d.type].solid, r: DECORATIONS[d.type].radius ?? 0.3, phase: Math.floor(d.x * 131 + d.y * 313) * 97 % 1000 });
 
     faceEl.textContent = FACES.normal;
-    const newWeapon = mode !== 'next' && !ALL_WEAPONS && deaths > 0 ? WEAPONS[PROGRESSION.weapons[deaths - 1]]?.name : '';
-    flash(deaths > 0 ? `${LEVELS[index].name}  -  RUN ${deaths + 1}${newWeapon ? '  -  NEW: ' + newWeapon : ''}` : LEVELS[index].name, deaths > 0 ? 70 : 40);
+    flash(deaths > 0 ? `${LEVELS[index].name}  -  RUN ${deaths + 1}  -  ${points} POINTS` : LEVELS[index].name, deaths > 0 ? 70 : 40);
     updateHud();
   }
   // FRAME LOOP. Each iteration: add the real time since the last iteration to an accumulator (capped at
