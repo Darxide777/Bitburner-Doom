@@ -106,10 +106,10 @@ the game-wide summon cap (`TUNING.maxEnemies`) and how many it summons per cast,
 
 Every run on any level is measured while you play and logged when it ends (death, win, or quitting after about ten seconds of play):
 
-- **Terminal and end screen:** a one-line summary, for example `ARENA round 3 DIED: 24.8 fps, work 11 avg / 19 p95 / 41 max ms (budget 40), peak 120 enemies 60 shots, 4 slow frames, 0 ms dropped, first slowdown at 38s with 140 enemies`.
+- **Terminal and end screen:** a one-line summary, for example `ARENA round 3 DIED: 21.5 fps, work 11 avg / 19 p95 / 41 max ms (budget 40), peak 120 enemies 60 shots, 4 slow frames, 0 ms dropped, first slowdown at 38s with 140 enemies`.
   *Work* is the time spent updating, drawing and updating the HUD per frame (the budget is 40 ms for 25 fps); above it the game slows down.
 - **`doom_bench.txt`:** one JSON line is appended per run (version, level, round, result, seconds, kills, average fps, work avg/p50/p95/p99/max, update and render time, slow frames,
-  dropped simulation time, peaks of enemies / projectiles / effects / DOM sprites / JS heap, the first second with a slowdown and how many enemies were alive then, and a per-second timeline
+  dropped simulation time, peaks of enemies / projectiles / effects / DOM sprites / JS heap, the first second with a slowdown (fps 15% under the first seconds' fps, or work over 75% of the budget) and how many enemies were alive then. A healthy run sits near 21.5 fps rather than 25, because Bitburner's `ns.sleep` adds a few ms per frame; a stall of a second or more (for example Bitburner's autosave) is left out of the timeline, so a missing second means a freeze, and a per-second timeline
   `[second, fps, avg work, max work, avg update, avg render, enemies, projectiles, effects, DOM sprites, heap MB]`). Read it with `cat doom_bench.txt` in the terminal or copy it out of the game's
   file editor. `--reset` does not clear it. Cheat-flag runs are marked.
 - **F3** shows a live line (fps, work ms, enemies, projectiles) in the HUD in place of the position.

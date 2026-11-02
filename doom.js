@@ -1010,7 +1010,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '106';
+  const VERSION = '107';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -4113,7 +4113,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   // taken: [seconds into the run, fps, avg work, max work, avg upd, avg rend, enemies alive, projectiles, effects, DOM sprite nodes, JS heap MB (Chrome only, else 0)].
   // At the end ONE JSON line is appended to BENCH_FILE (doom_bench.txt) and a one-line summary is printed in the terminal and shown on the end screen:
   //   { v, lv (level), round (arena round), r (result DIED|WON|QUIT), secs, kills, fps (average), work: [avg, p50, p95, p99, max], upd: [avg, max], rend: [avg, max],
-  //     slow (frames over budget), dropMs, peak: { en, pr, ef, dom, heap }, firstSlow: [second, enemies alive] (first second with fps under 88% of 25 or work over budget, or null),
+  //     slow (frames over budget), dropMs, peak: { en, pr, ef, dom, heap }, firstSlow: [second, enemies alive] (first second with fps under 85% of the fps of the first three seconds, or work over 75% of the budget, or null),
   //     cheats, sec: [the per-second samples] }
   // F3 shows a live line (fps, work ms, enemies, projectiles) beside the position in the HUD.
   const BENCH_FILE = 'doom_bench.txt';
@@ -4143,7 +4143,9 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       const k = p.pk; k.en = Math.max(k.en, en); k.pr = Math.max(k.pr, projectiles.length); k.ef = Math.max(k.ef, effects.length); k.dom = Math.max(k.dom, dom); k.heap = Math.max(k.heap, heap);
       const r1 = v => Math.round(v * 10) / 10;
       p.sec.push([Math.round(p.active / 1000), r1(fps), r1(avgW), r1(b.wMax), r1(b.u / b.f), r1(b.r / b.f), en, projectiles.length, effects.length, dom, heap]);
-      if (!p.firstSlow && (fps < 0.88 * 1000 / TARGET_FRAME_MS || avgW > TARGET_FRAME_MS)) p.firstSlow = [Math.round(p.active / 1000), en];
+      // (Bitburner's ns.sleep adds a few ms, so a healthy run sits near 21.5 fps, not 25: judge against the fps of the first seconds, not against 25.)
+      if (p.sec.length <= 3) p.baseFps = Math.max(p.baseFps || 0, fps);
+      if (!p.firstSlow && p.sec.length > 3 && (fps < 0.85 * p.baseFps || avgW > 0.75 * TARGET_FRAME_MS)) p.firstSlow = [Math.round(p.active / 1000), en];
       perfLive = `FPS ${r1(fps)}  WORK ${r1(avgW)}ms  EN ${en}  PR ${projectiles.length}`;
       p.b = { f: 0, act: 0, w: 0, wMax: 0, u: 0, r: 0 };
     }
