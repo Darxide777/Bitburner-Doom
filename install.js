@@ -11,6 +11,7 @@ export async function main(ns) {
     ['doom.js', ''],
     ['map.txt', ''],
     ['map_rooms.txt', ''],
+    ['map_arena.txt', ''],
     ['audio.json', ' (this may take a moment)'],
     ['sprites.json', ' (this may take a moment)'],
   ];

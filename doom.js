@@ -182,6 +182,19 @@ const SPRITE_ALIASES = {
 // which map files to download, so keep that spelling.)
 const LEVELS = [
   { name: 'ROOMS: Square rooms', map: 'map_rooms.txt', par: 600, keyDrops: true, winOnArchviles: true },   // seven square rooms in a snake, one locked door between each (built by make_rooms.py)
+  // ARENA: a store room plus ONE big square room. The enemies are not in the map: startLevel() spawns `enemies + perRound * round` of them at random in `room` (a tile
+  // rectangle, from make_arena.py) from `pool`, plus the `summoners` ([type, base count, extra per round]). Every death AND every clear raises the saved `arenaRound` by one, and
+  // `growth` says how much each enemy stat grows per round (a stat is 1 + growth * round): hp, damage (to you), fire (attack chance, including how often summoners summon),
+  // projectile (shot speed), speed (walking speed), summon (how many enemies a summoner may have alive, the overall summon cap, and how often it summons). `caps` stops
+  // a stat that would break the physics (default no cap). It is the benchmark level: the run's performance numbers are logged (see PERFORMANCE LOG).
+  { name: 'ARENA: Endless', map: 'map_arena.txt', par: 0,
+    arena: {
+      room: { x0: 19, y0: 1, x1: 48, y1: 30 }, enemies: 16, perRound: 4, safeColumns: 4,
+      pool: ['ZOMBIE', 'ZOMBIESERGEANT', 'IMP', 'DEMON', 'CACODEMON', 'LOSTSOUL', 'BARON', 'ZOMBIETANK', 'ZOMBIEMISSILETANK', 'ZOMBIEPLASMATANK', 'CRYOBUS'],
+      summoners: [['PAINELEMENTAL', 1, 0.5], ['ARCHVILE', 0, 0.34]],
+      growth: { hp: 0.15, damage: 0.10, fire: 0.10, projectile: 0.05, speed: 0.05, summon: 0.15 },
+      caps: { speed: 2.5, projectile: 3 },
+    } },
   { name: 'HANGAR: E1M1', map: ASSETS.map, par: 300 },   // the hand-drawn Doom-style map: enemies, pickups, keys on the map, an Arch-vile boss in front of the exit
 ];
 
@@ -291,6 +304,7 @@ const TUNING = {
   painTicks: 6,
   hazard: { damage: 2, interval: 15, label: 'NUKAGE!' },
   powerTicks: { invuln: 750, radsuit: 1500, berserk: 1500 },
+  enemyProjectileSpeed: 1.5,   // multiplies the speed of every ENEMY shot (fireballs, bullets, skulls, missiles); your own weapons' shots are not affected
   threat: { hp: 0.10, damage: 0.05 },   // every Arch-vile you kill (this run) makes ALL enemies this much tougher: +10% hit points and +5% damage to you, each kill (stacking; see threatMult)
   checkpointHeal: 50,   // health you get when a map-placed Arch-vile dies (also a CHECKPOINT, see `checkpoint`); never above 100 (or what you already have)
   freezeGraceTicks: 50,
@@ -501,7 +515,7 @@ const DECORATIONS = {
 };
 
 // ─── PROJECTILES ────────────────────────────────────────────────────────────
-// speed: tiles per tick. damage: default damage (an attack or weapon can override it).
+// speed: tiles per tick. damage: default damage (an attack or weapon can override it). ENEMY shots are multiplied by TUNING.enemyProjectileSpeed (1.5), so speed is their base speed.
 // sprite: sprite type to draw: art "<Type>_projectile" in flight and "<Type>_projectile_impact" where an ENEMY shot
 //         lands (one image each). Default / false = ASCII only, drawn from `blob` (there is no generic projectile art).
 // hitSound: sound played where an ENEMY shot lands.   scale: size of the flying picture (default 1).
@@ -947,13 +961,14 @@ export async function main(ns) {
   const INFINITE_HEALTH = !!flags.godmode;
   const INFINITE_AMMO = !!flags.infiniteammo;
   const ALL_WEAPONS = !!flags.allweapons;
-  // SAVED PROGRESS (PROGRESS_FILE, JSON text): `deaths`, `avBest` (most Arch-viles killed in one run, unlocks store weapons), `points` (banked score to spend in the STORE), `buys` (STORE id -> times bought), `inv` (STORE id -> consumables in stock) and `runs`, the history of every run you have finished, which keeps
+  // SAVED PROGRESS (PROGRESS_FILE, JSON text): `deaths`, `avBest` (most Arch-viles killed in one run, unlocks store weapons), `arena` (the ARENA round), `points` (banked score to spend in the STORE), `buys` (STORE id -> times bought), `inv` (STORE id -> consumables in stock) and `runs`, the history of every run you have finished, which keeps
   // growing after you win (only the last MAX_RUNS are kept). A run is one attempt, ended by dying or by reaching the exit; each entry is
   //   { n: run number, r: 'DIED' | 'WON', lv: level, t: seconds, k: kills, kt: kill total, sc: score, hp: health you started with,
   //     w: weapons you started with, ch: true if cheat flags were on }
   // Read at start, written whenever a run ends. A missing or unreadable file means a fresh start; an older file holding just a number
   // is read as the death count. The end screen shows the last few runs as bars, and H opens the full history (see historyLines).
   const REFUNDED_ITEMS = { key_blue: 400, key_red: 1000, key_yellow: 2000 };   // store items that no longer exist, with what they cost
+  let arenaRound = 0;   // deaths + clears so far on the ARENA level: how much harder it is (see LEVELS)
   let avBest = 0;   // most Arch-viles you have killed in one run: weapon n in the STORE unlocks at n (see `unlock`)
   let deaths = 0, runs = [], points = 0, buys = {}, inv = {};
   const cleanCounts = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).map(([k, v]) => [k, Math.max(0, Math.floor(Number(v)) || 0)]).filter(([k, v]) => v > 0 && STORE.some(i => i.id === k)));
@@ -963,19 +978,19 @@ export async function main(ns) {
       if (raw.startsWith('{')) {
         const o = JSON.parse(raw);
         deaths = Math.max(0, Math.floor(Number(o.deaths)) || 0);
-        avBest = Math.max(0, Math.floor(Number(o.avBest)) || 0);
+        avBest = Math.max(0, Math.floor(Number(o.avBest)) || 0); arenaRound = Math.max(0, Math.floor(Number(o.arena)) || 0);
         points = Math.max(0, Math.floor(Number(o.points)) || 0); buys = cleanCounts(o.buys); inv = cleanCounts(o.inv);
         for (const [id, price] of Object.entries(REFUNDED_ITEMS)) if (o.buys?.[id]) points += price;   // keycards used to be for sale: give the points back
         runs = Array.isArray(o.runs) ? o.runs.filter(x => x && typeof x === 'object' && Number.isFinite(x.sc) && Number.isFinite(x.t)) : [];
       } else deaths = Math.max(0, parseInt(raw, 10) || 0);
-    } catch (e) { deaths = 0; runs = []; points = 0; buys = {}; inv = {}; avBest = 0; }
+    } catch (e) { deaths = 0; runs = []; points = 0; buys = {}; inv = {}; avBest = 0; arenaRound = 0; }
   }
   const MAX_RUNS = 200;
   const CHEATING = INFINITE_HEALTH || INFINITE_AMMO || ALL_WEAPONS;
   // Bitburner kills a script that calls ANY ns function while its main loop is waiting in ns.sleep ("concurrent calls"), which is exactly where
   // key and click handlers run. So handlers (store purchases, using an item) only set saveDirty, and the frame loop writes the file between its sleeps.
   let saveDirty = false;
-  const saveProgress = () => { try { ns.write(PROGRESS_FILE, JSON.stringify({ deaths, avBest, points, buys, inv, runs: runs.slice(-MAX_RUNS) }), 'w'); } catch (e) { } };
+  const saveProgress = () => { try { ns.write(PROGRESS_FILE, JSON.stringify({ deaths, avBest, arena: arenaRound, points, buys, inv, runs: runs.slice(-MAX_RUNS) }), 'w'); } catch (e) { } };
   if (flags.reset) saveProgress();
   // Adds the run that just ended (result 'DIED' or 'WON') to the history and saves it. Call once, after endTime and score are final.
   let bankedScore = 0;   // how much of the current `score` is already in `points` (the score carries over between levels of one run, so only the new part is banked)
@@ -983,6 +998,7 @@ export async function main(ns) {
   function recordRun(result) {
     lastGain = CHEATING ? 0 : Math.max(0, score - bankedScore); bankedScore = score; points += lastGain;   // (cheat flags earn no points)
     const t = Math.max(0, Math.floor(((endTime || Date.now()) - gameStartTime) / 1000));
+    if (LEVELS[levelIndex].arena) arenaRound++;   // the next arena run is one round harder, whether you died or cleared it
     runs.push({ n: (runs.length ? runs[runs.length - 1].n : 0) + 1, r: result, lv: LEVELS[levelIndex].name.split(':')[0], t, k: kills, kt: countLevelEnemies(),
       sc: score, hp: Math.round(levelStart?.health ?? health), w: levelStart?.owned.length ?? owned.size, ch: CHEATING || undefined });
     if (runs.length > MAX_RUNS) runs.splice(0, runs.length - MAX_RUNS);
@@ -994,7 +1010,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '104';
+  const VERSION = '106';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1408,7 +1424,7 @@ export async function main(ns) {
   // Letters are normalised to lowercase so Shift/CapsLock can't leave a key "stuck" down.
   const normKey = k => (k.length === 1 ? k.toLowerCase() : k);
   const BLOCKED_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ',
-    'w', 'a', 's', 'd', 'q', 'e', 'f', 'p', 'm', 'Tab', 'Escape', ...Object.keys(WEAPON_KEYS), ...STORE.filter(i => i.hotkey).map(i => i.hotkey)]);
+    'w', 'a', 's', 'd', 'q', 'e', 'f', 'p', 'm', 'Tab', 'Escape', 'F3', ...Object.keys(WEAPON_KEYS), ...STORE.filter(i => i.hotkey).map(i => i.hotkey)]);
   // Pause: P toggles it, and losing window focus turns it on (so enemies can't kill you while you are in another
   // tab). Only meaningful during play (inGame, set by the frame loop). While paused the frame loop skips updateGame
   // and just redraws with a PAUSED message; the elapsed pause time is added to gameStartTime so the clock ignores it.
@@ -1616,6 +1632,7 @@ export async function main(ns) {
       if (k === 'p' && !e.repeat && inGame && !gameOver && !won) { if (automapOpen) closeAutomap(); else setPaused(!paused); }
       if (k === 'm' && !e.repeat && inGame && !gameOver && !won) toggleAutomap();
       if (k === 'Tab' && !e.repeat) showMap = !showMap;
+      if (k === 'F3' && !e.repeat) perfOn = !perfOn;   // live performance line (see PERFORMANCE LOG)
       if (WEAPON_KEYS[k] && !e.repeat) switchWeapon(WEAPON_KEYS[k]);
       if (BLOCKED_KEYS.has(k)) e.preventDefault();
     } else {
@@ -1702,7 +1719,7 @@ export async function main(ns) {
       .map(w => `${w.key}=${w.name[0]}${w.name.slice(1).toLowerCase()}`).join(' ') + ' • WASD • F Use • Tab Minimap • M Map' +
       STORE.filter(i => i.hotkey && inv[i.id] > 0).map(i => ` • ${i.hotkey.toUpperCase()} ${i.name[0]}${i.name.slice(1).toLowerCase()} x${inv[i.id]}`).join('');
     if (hint !== lastHint) { hudEl.hint.textContent = hint; lastHint = hint; }
-    hudEl.pos.textContent = `X:${px.toFixed(1)} Y:${py.toFixed(1)}`;
+    hudEl.pos.textContent = perfOn ? perfLive : `X:${px.toFixed(1)} Y:${py.toFixed(1)}`;
   }
 
   // The big centre-screen message. style: a key of FLASH_STYLES ('', 'boss', 'secret').
@@ -1774,7 +1791,7 @@ export async function main(ns) {
   // message, and on death sets gameOver/endTime and shows YOU DIED. Does nothing once gameOver is set or while invulnerable.
   function hurtPlayer(dmg, label = 'HIT!', { bypass = false, volume = 0.8, ignoreCritical = false, style = '', scale = true } = {}) {
     if (gameOver || powers.invuln > 0) return;   // invulnerable: no damage, no pain feedback
-    if (scale) dmg *= threatMult('damage');   // enemies hit harder after each Arch-vile kill (scale:false for the nukage)
+    if (scale) dmg *= threatMult('damage') * arenaStat('damage');   // enemies hit harder after each Arch-vile kill (scale:false for the nukage)
     const actual = takeDamage(dmg, bypass);
     if (volume > 0) play(SOUNDS.hurt, volume);
     faceEl.textContent = health <= 0 ? FACES.dead : health < 30 ? FACES.lowHp : FACES.hit;
@@ -3121,6 +3138,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       [`  Secrets: ${secretsFound} / ${secretsTotal}                `, '#aaa'],
       [`  Score:   ${score}                `, '#ff0'],
       [`  +${lastGain} POINTS  (TOTAL ${points})  `, '#da4'],
+      ...(perfLine ? [[`  ${perfLine}  `, '#8a8']] : []),
       ['', null],
       ['  ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★  ', '#ff0'],
       ['', null],
@@ -3139,6 +3157,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       [`  Score:   ${score}                `, '#666'],
       ['', null],
       [`  +${lastGain} POINTS  (TOTAL ${points}) - SPEND AT THE STORE  `, '#da4'],
+      ...(perfLine ? [[`  ${perfLine}  `, '#8a8']] : []),
       ['', null],
       ['  ██████████████████████████████  ', '#600'],
       ['', null],
@@ -3467,7 +3486,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     const angle = Math.atan2(py - sy, px - sx) + spread;
     projectiles.push({
       x: sx, y: sy,
-      dx: Math.cos(angle) * def.speed, dy: Math.sin(angle) * def.speed,
+      dx: Math.cos(angle) * def.speed * TUNING.enemyProjectileSpeed * arenaStat('projectile'), dy: Math.sin(angle) * def.speed * TUNING.enemyProjectileSpeed * arenaStat('projectile'),
       owner: 'enemy', alive: true, damage: damage ?? def.damage, type, bypassArmor: def.bypassArmor ?? false,
     });
   }
@@ -3521,10 +3540,16 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   }
   // THREAT: each Arch-vile killed this run (checkpoint.dead) multiplies enemy hit points / damage by 1 + TUNING.threat[stat] per kill. A new run after dying keeps it
   // (the dead stay dead), a new game or level resets it. New enemies are made with it; the ones already alive are scaled when the kill happens (reachCheckpoint).
+  // ARENA scaling: 1 + growth[stat] * runRound on the ARENA level (runRound = arenaRound when the run began), 1 elsewhere, up to the level's cap for that stat.
+  let runRound = 0;
+  const arenaStat = stat => {
+    const A = LEVELS[levelIndex].arena;
+    return A ? Math.min(1 + (A.growth[stat] || 0) * runRound, A.caps?.[stat] ?? Infinity) : 1;
+  };
   const avKills = () => (checkpoint?.level === levelIndex ? checkpoint.dead.length : 0);
   const threatMult = (stat, n = avKills()) => 1 + TUNING.threat[stat] * n;
   function makeEnemy(type, x, y) {
-    const hp = Math.max(1, Math.round(ENEMIES[type].hp * DIFFICULTIES[difficulty].enemyHp * threatMult('hp')));
+    const hp = Math.max(1, Math.round(ENEMIES[type].hp * DIFFICULTIES[difficulty].enemyHp * threatMult('hp') * arenaStat('hp')));
     return {
       type, def: ENEMIES[type],
       x, y, spawnX: x, spawnY: y,
@@ -3573,16 +3598,17 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     alive += pendingSpawns.length;
     let mine = parent.kids.length + pendingSpawns.filter(p => p.parent === parent).length;
     let made = 0;
-    for (let n = 0; n < (atk.count ?? 1); n++) {
-      if (mine >= (atk.maxAlive ?? 4) || alive >= TUNING.maxEnemies) break;
+    for (let n = 0; n < Math.round((atk.count ?? 1) * arenaStat('summon')); n++) {
+      if (mine >= Math.round((atk.maxAlive ?? 4) * arenaStat('summon')) || alive >= Math.round(TUNING.maxEnemies * arenaStat('summon'))) break;   // (both caps grow with the arena round)
       const type = pickSpawnType(atk.spawn), r = ENEMIES[type].radius;
       for (let tries = 0; tries < 10; tries++) {
         const a = Math.random() * Math.PI * 2, d = 1.2 + Math.random() * 1.3;
         const x = parent.x + Math.cos(a) * d, y = parent.y + Math.sin(a) * d;
         if (!spawnSpotFree(x, y, r, parent)) continue;
-        pendingSpawns.push({ x, y, type, parent, ttl: TUNING.spawnWarningTicks });
+        const warn = Math.max(5, Math.round(TUNING.spawnWarningTicks / arenaStat('summon')));   // the warning gets shorter as the arena rounds go up
+        pendingSpawns.push({ x, y, type, parent, ttl: warn });
         // cycle = how many warning frames to flip through (0 when there is no art: the ASCII blob is drawn instead)
-        effects.push({ x, y, ttl: TUNING.spawnWarningTicks, sprite: 'SPAWNWARNING', ground: true, scale: 2.5, cycle: framesFor('SPAWNWARNING', 'idle')?.length || 0,
+        effects.push({ x, y, ttl: warn, sprite: 'SPAWNWARNING', ground: true, scale: 2.5, cycle: framesFor('SPAWNWARNING', 'idle')?.length || 0,
           anim: 'idle', blob: { tag: '\x19', chars: '^*+.', size: 0.5 } });
         mine++; alive++; made++;
         break;
@@ -3736,7 +3762,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       if (e.tpCool <= 0 && ((sees && dist < def.teleport.dist) || idleHop)) teleportEnemy(e, def);
     }
     const roaming = def.summoner && e.active;   // an active summoner never goes after you: it wanders and summons (and flees when you are close)
-    const spd = typeof def.speed === 'function' ? def.speed(e) : def.speed;
+    const spd = (typeof def.speed === 'function' ? def.speed(e) : def.speed) * arenaStat('speed');
     const spawnDist = Math.hypot(e.x - e.spawnX, e.y - e.spawnY);
     if (spd > 0 && spawnDist < def.roam) {
       if (sees) {
@@ -3767,12 +3793,12 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     } else if (roaming && spd > 0) wanderSummoner(e, def, spd);   // strayed past its roam limit (fleeing): wander homes it back
 
     // Attacks: each one rolls independently every tick (difficulty scales the chance)
-    const aggression = DIFFICULTIES[difficulty].enemyChance;
+    const aggression = DIFFICULTIES[difficulty].enemyChance * arenaStat('fire');
     for (const atk of def.attacks) {
       const anywhere = roaming && atk.kind === 'spawn';   // an active summoner summons whether or not you are near or in view
       const maxRange = atk.kind === 'ranged' && TUNING.rangedReachView ? Math.max(atk.range[1], VIEW_DIST) : atk.range[1];   // ranged: anywhere in view
       if (!anywhere && (dist < atk.range[0] || dist >= maxRange)) continue;
-      if (Math.random() >= atk.chance * aggression || (!anywhere && !los())) continue;
+      if (Math.random() >= atk.chance * aggression * (atk.kind === 'spawn' ? arenaStat('summon') : 1) || (!anywhere && !los())) continue;   // (summoners also summon more often)
       enemyAttack(e, atk);
     }
   }
@@ -3883,7 +3909,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     // around the player. Dead projectiles are compacted out of the array afterwards.
     for (const p of projectiles) {
       const def = PROJECTILES[p.type];
-      const steps = Math.max(1, Math.ceil(def.speed / 0.15));   // small sub-steps so fast shots can't skip through things
+      const steps = Math.max(1, Math.ceil(Math.hypot(p.dx, p.dy) / 0.15));   // small sub-steps so fast shots can't skip through things (from the shot's real speed, enemy shots are sped up by TUNING.enemyProjectileSpeed)
       for (let i = 0; i < steps && p.alive; i++) {
         const nx = p.x + p.dx / steps, ny = p.y + p.dy / steps;
         // also a wall when the step cuts diagonally across the corner between two solid cells (a diagonal wall has no gap)
@@ -3937,6 +3963,8 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       if (hazardTimer > 0) hazardTimer--;
       else { hazardTimer = TUNING.hazard.interval; hurtPlayer(TUNING.hazard.damage, TUNING.hazard.label, { volume: 0.4, scale: false }); }
     } else hazardTimer = 0;
+    // ── Arena cleared: every enemy (including summoned ones) is dead and nothing is about to appear ──
+    if (arenaArmed && !won && !gameOver && ++arenaCheck % 5 === 0 && !pendingSpawns.length && !enemies.some(e => e.alive && !e.def.prop)) winLevel('ARENA CLEARED!');
     // ── Exit check ───────────────────────────────────────────────────────
     if (tileAt(px, py) === TILE.EXIT) {
       winLevel();
@@ -4014,6 +4042,28 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     currentWeapon = (!ALL_WEAPONS && gotWeapons.length ? gotWeapons[gotWeapons.length - 1] : [...owned][0]) ?? Object.keys(WEAPONS)[0];
   }
 
+  // ARENA: adds the level's random enemies to spawns.enemies (see the `arena` notes at LEVELS): `enemies + perRound * round` from the pool, one per floor tile, never in
+  // the `safeColumns` columns nearest the door, plus each summoner type (`base + per * round`, rounded down). Sets runRound and arenaArmed (clear detection).
+  let arenaArmed = false, arenaCheck = 0;
+  function startArena(index) {
+    const A = LEVELS[index].arena;
+    arenaArmed = false;
+    if (!A) return;
+    runRound = arenaRound;
+    const R = A.room, want = Math.floor(A.enemies + A.perRound * runRound), used = new Set();
+    const add = type => {
+      for (let tries = 0; tries < 60; tries++) {
+        const x = R.x0 + (A.safeColumns ?? 0) + Math.floor(Math.random() * (R.x1 - R.x0 + 1 - (A.safeColumns ?? 0))), y = R.y0 + Math.floor(Math.random() * (R.y1 - R.y0 + 1));
+        if (used.has(y * MW + x) || tileKind[y * MW + x] !== TILE.FLOOR) continue;
+        used.add(y * MW + x); spawns.enemies.push({ type, x: x + 0.5, y: y + 0.5 });
+        return true;
+      }
+      return false;
+    };
+    for (const [type, base, per] of A.summoners ?? []) for (let i = 0; i < Math.floor(base + per * runRound); i++) add(type);
+    for (let i = 0; i < want; i++) add(A.pool[Math.floor(Math.random() * A.pool.length)]);
+    arenaArmed = spawns.enemies.length > 0;
+  }
   function startLevel(index, mode) {
     if (mode === 'fresh') { resetLoadout(); score = 0; bankedScore = 0; }
     else if (mode === 'retry') { resetLoadout(); score = levelStart?.score ?? 0; bankedScore = score; }   // a new run: the loadout from the store purchases
@@ -4034,11 +4084,12 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     frameWallTile.fill(TILE.WALL); frameWallIdx.fill(0);
 
     enemies.length = 0;
-    if (mode !== 'retry' || checkpoint?.level !== index) checkpoint = null;   // only a retry after dying keeps the checkpoint (see reachCheckpoint)
+    if (LEVELS[index].arena) startArena(index);
+    if (mode !== 'retry' || checkpoint?.level !== index || LEVELS[index].arena) checkpoint = null;   // only a retry after dying keeps the checkpoint (see reachCheckpoint)
     spawns.enemies.forEach((s, i) => {
       if (checkpoint?.dead.includes(i)) return;   // an Arch-vile you already killed stays dead
       const e = makeEnemy(s.type, s.x, s.y);
-      if (ENEMIES[s.type].summoner && ENEMIES[s.type].invulnerable) e.spawnIdx = i;
+      if (ENEMIES[s.type].summoner && ENEMIES[s.type].invulnerable && !LEVELS[index].arena) e.spawnIdx = i;   // (no checkpoints in the arena: its enemies are new every run)
       enemies.push(e);
     });
     if (checkpoint) for (const k of checkpoint.keys) heldKeys.add(k);
@@ -4050,9 +4101,70 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     for (const d of spawns.decor) decor.push({ ...d, solid: !!DECORATIONS[d.type].solid, r: DECORATIONS[d.type].radius ?? 0.3, phase: Math.floor(d.x * 131 + d.y * 313) * 97 % 1000 });
 
     faceEl.textContent = FACES.normal;
-    flash(deaths > 0 ? `${LEVELS[index].name}  -  RUN ${deaths + 1}  -  ${points} POINTS` : LEVELS[index].name, deaths > 0 ? 70 : 40);
+    flash(LEVELS[index].arena ? `${LEVELS[index].name}  -  ROUND ${runRound + 1}  -  ${enemies.filter(e => !e.def.prop).length} ENEMIES` : deaths > 0 ? `${LEVELS[index].name}  -  RUN ${deaths + 1}  -  ${points} POINTS` : LEVELS[index].name, deaths > 0 || LEVELS[index].arena ? 70 : 40);
+    resetPerf();
     updateHud();
   }
+  // ─── PERFORMANCE LOG ────────────────────────────────────────────────────────
+  // Every run (any level) is measured while you play (not while paused) and logged when it ends: on death, on a win, or when you quit after a while. The measurements are
+  // per FRAME of the frame loop: `work` = the time spent updating (the simulation ticks), drawing and updating the HUD, in ms, not counting the sleep (the budget is
+  // TARGET_FRAME_MS = 40 ms for 25 fps; above it the game starts to slow down); `upd` and `rend` split the work into the simulation and the drawing; `interval` = real time between
+  // frames (fps = 1000 / interval); `dropped` = simulation time that was skipped because the game fell more than MAX_STEPS_PER_FRAME ticks behind. Once a second a sample is
+  // taken: [seconds into the run, fps, avg work, max work, avg upd, avg rend, enemies alive, projectiles, effects, DOM sprite nodes, JS heap MB (Chrome only, else 0)].
+  // At the end ONE JSON line is appended to BENCH_FILE (doom_bench.txt) and a one-line summary is printed in the terminal and shown on the end screen:
+  //   { v, lv (level), round (arena round), r (result DIED|WON|QUIT), secs, kills, fps (average), work: [avg, p50, p95, p99, max], upd: [avg, max], rend: [avg, max],
+  //     slow (frames over budget), dropMs, peak: { en, pr, ef, dom, heap }, firstSlow: [second, enemies alive] (first second with fps under 88% of 25 or work over budget, or null),
+  //     cheats, sec: [the per-second samples] }
+  // F3 shows a live line (fps, work ms, enemies, projectiles) beside the position in the HUD.
+  const BENCH_FILE = 'doom_bench.txt';
+  const nowMs = () => (win.performance && win.performance.now ? win.performance.now() : Date.now());
+  const PERF_MAX = 20000;       // frame times kept for the percentiles (about 13 minutes of play); the sums and maxima keep counting after that
+  let perf = null, perfOn = false, perfLive = '', perfLine = '';
+  function resetPerf() {
+    perf = { frames: 0, n: 0, work: new Float32Array(PERF_MAX), active: 0, wSum: 0, wMax: 0, uSum: 0, uMax: 0, rSum: 0, rMax: 0, slow: 0, drop: 0,
+      pk: { en: 0, pr: 0, ef: 0, dom: 0, heap: 0 }, sec: [], b: { f: 0, act: 0, w: 0, wMax: 0, u: 0, r: 0 }, firstSlow: null, done: false };
+    perfLine = '';
+  }
+  function perfFrame(interval, work, upd, rend, dropped) {
+    const p = perf;
+    if (!p) return;
+    p.frames++; if (interval < 1000) p.active += interval;   // (the long interval after unpausing is not play time)
+    if (p.n < PERF_MAX) p.work[p.n++] = work;
+    p.wSum += work; p.wMax = Math.max(p.wMax, work); p.uSum += upd; p.uMax = Math.max(p.uMax, upd); p.rSum += rend; p.rMax = Math.max(p.rMax, rend);
+    if (work > TARGET_FRAME_MS) p.slow++;
+    p.drop += dropped;
+    const b = p.b;
+    b.f++; b.act += interval < 1000 ? interval : 0; b.w += work; b.wMax = Math.max(b.wMax, work); b.u += upd; b.r += rend;
+    if (b.act >= 1000) {   // close the one-second bucket
+      let en = 0;
+      for (const e of enemies) if (e.alive && !e.def.prop) en++;
+      const dom = spriteOverlay.childElementCount || 0, heap = win.performance?.memory ? Math.round(win.performance.memory.usedJSHeapSize / 1048576) : 0;
+      const fps = b.f * 1000 / b.act, avgW = b.w / b.f;
+      const k = p.pk; k.en = Math.max(k.en, en); k.pr = Math.max(k.pr, projectiles.length); k.ef = Math.max(k.ef, effects.length); k.dom = Math.max(k.dom, dom); k.heap = Math.max(k.heap, heap);
+      const r1 = v => Math.round(v * 10) / 10;
+      p.sec.push([Math.round(p.active / 1000), r1(fps), r1(avgW), r1(b.wMax), r1(b.u / b.f), r1(b.r / b.f), en, projectiles.length, effects.length, dom, heap]);
+      if (!p.firstSlow && (fps < 0.88 * 1000 / TARGET_FRAME_MS || avgW > TARGET_FRAME_MS)) p.firstSlow = [Math.round(p.active / 1000), en];
+      perfLive = `FPS ${r1(fps)}  WORK ${r1(avgW)}ms  EN ${en}  PR ${projectiles.length}`;
+      p.b = { f: 0, act: 0, w: 0, wMax: 0, u: 0, r: 0 };
+    }
+  }
+  // Called once when a run ends (and by the finally block for a run you quit): builds the summary, appends it to BENCH_FILE, prints it, and sets perfLine for the end screen.
+  function finishPerf(result) {
+    const p = perf;
+    if (!p || p.done || p.frames < 5) return;
+    p.done = true;
+    const sorted = Array.from(p.work.subarray(0, p.n)).sort((a, b) => a - b), q = f => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * f))] ?? 0;
+    const r1 = v => Math.round(v * 10) / 10, secs = Math.round(p.active / 1000), fps = p.active ? r1(p.frames * 1000 / p.active) : 0;
+    const out = { v: VERSION, lv: LEVELS[levelIndex].name.split(':')[0], round: LEVELS[levelIndex].arena ? runRound + 1 : undefined, r: result, secs, kills, fps,
+      work: [r1(p.wSum / p.frames), r1(q(0.5)), r1(q(0.95)), r1(q(0.99)), r1(p.wMax)], upd: [r1(p.uSum / p.frames), r1(p.uMax)], rend: [r1(p.rSum / p.frames), r1(p.rMax)],
+      slow: p.slow, dropMs: Math.round(p.drop), peak: p.pk, firstSlow: p.firstSlow, cheats: CHEATING || undefined, sec: p.sec.slice(-600) };
+    const line = `${out.lv}${out.round ? ' round ' + out.round : ''} ${result}: ${fps} fps, work ${out.work[0]} avg / ${out.work[2]} p95 / ${out.work[4]} max ms (budget ${TARGET_FRAME_MS}), ` +
+      `peak ${p.pk.en} enemies ${p.pk.pr} shots, ${p.slow} slow frames, ${out.dropMs} ms dropped${p.firstSlow ? `, first slowdown at ${p.firstSlow[0]}s with ${p.firstSlow[1]} enemies` : ', no slowdown'}`;
+    perfLine = `${out.round ? 'ROUND ' + out.round + '  ' : ''}PERF ${fps} FPS  work ${out.work[0]}/${out.work[2]}/${out.work[4]} ms  peak ${p.pk.en} enemies` + (p.firstSlow ? `  slowed at ${p.firstSlow[1]}` : '');
+    try { ns.write(BENCH_FILE, JSON.stringify(out) + '\n', 'a'); } catch (e) { }
+    try { ns.tprint(`doom.js perf: ${line}`); } catch (e) { }
+  }
+
   // FRAME LOOP. Each iteration: add the real time since the last iteration to an accumulator (capped at
   // STEP_MS * MAX_STEPS_PER_FRAME), run updateGame() once per whole STEP_MS in the accumulator, render once, update
   // the HUD, then sleep only the rest of TARGET_FRAME_MS. After gameOver/won the game stops simulating and shows the end
@@ -4065,12 +4177,14 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   try {
     startLevel(selLevel, 'fresh');
     inGame = true;
-    let last = Date.now(), acc = 0, prevEnter = false, prevH = false;
+    let last = Date.now(), acc = 0, prevEnter = false, prevH = false, prevStart = nowMs();
     while (running) {
       const frameStart = Date.now();
       if (saveDirty) { saveDirty = false; saveProgress(); }   // purchases / used items made by handlers since the last frame
-      acc = Math.min(acc + (frameStart - last), STEP_MS * MAX_STEPS_PER_FRAME);
+      const rawAcc = acc + (frameStart - last), dropped = Math.max(0, rawAcc - STEP_MS * MAX_STEPS_PER_FRAME);   // (dropped: simulation time skipped because the game fell too far behind)
+      acc = Math.min(rawAcc, STEP_MS * MAX_STEPS_PER_FRAME);
       last = frameStart;
+      const t0 = nowMs(), interval = t0 - prevStart; prevStart = t0;
 
       if (paused) {
         // Frozen: no simulation, just keep the picture (and a PAUSED message) on screen
@@ -4080,11 +4194,14 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       } else if (!gameOver && !won) {
         // Catch the simulation up to real time, then draw once
         while (acc >= STEP_MS && !gameOver && !won) { updateGame(); acc -= STEP_MS; }
+        const t1 = nowMs();
         renderFrame();
         updateHud();
+        const t2 = nowMs();
+        perfFrame(interval, t2 - t0, t1 - t0, t2 - t1, dropped);
       } else {
         // End screen: draw once (the clock is frozen at endTime), then wait for Enter
-        if (!endDrawn) { renderEndScreen(won); endDrawn = true; prevEnter = !!keys['Enter']; }
+        if (!endDrawn) { finishPerf(won ? 'WON' : 'DIED'); renderEndScreen(won); endDrawn = true; prevEnter = !!keys['Enter']; }
         acc = 0;
         const hKey = !!keys['h'];
         if (hKey && !prevH) { showHistory = !showHistory; endDrawn = false; }   // H toggles the full run history
@@ -4105,6 +4222,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     ns.tprint(`ERROR: ${e.message}\n${e.stack ?? ''}`);
   } finally {
     if (saveDirty) saveProgress();
+    if (perf && !perf.done && !gameOver && !won && perf.frames > 250) finishPerf('QUIT');   // a run you walked away from (at least ~10 s of play)
     cleanup();
   }
 }

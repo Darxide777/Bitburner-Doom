@@ -55,6 +55,7 @@ On the title screen use **Left/Right** to pick the difficulty (easy, normal, har
 | 1-7 | Select a weapon (only once you have bought it) |
 | Z X C V B N | Use a consumable from your stock: **Z** Berserk, **X** Invulnerability, **C** Radiation suit, **V** Medkit, **B** Armor vest, **N** Ammo pack (the HUD hint line lists the ones you have) |
 | Tab | Toggle the minimap |
+| F3 | Show / hide the live performance line (fps, work per frame, enemies, projectiles) |
 | M | Full-screen automap with fog of war (pauses the game; M or P closes it) |
 | P | Pause / resume (the game also pauses by itself when the window loses focus) |
 | Mouse | Turn (click the game once to capture the mouse); left click shoots |
@@ -73,7 +74,7 @@ within 16 tiles of you (`AUTOMAP_ITEM_RADIUS`), weapons, armor and power-ups nev
 
 ## Choosing a level
 
-On the title screen, **Up/Down choose the level** and Left/Right the difficulty. There are two: **ROOMS** (square rooms, below) and **HANGAR** (E1M1, the Doom-style map in `map.txt`, below). Winning a level offers to play the same one again; the levels are separate maps, not an episode. Your points, purchases and unlocks are shared by both.
+On the title screen, **Up/Down choose the level** and Left/Right the difficulty. There are three: **ROOMS** (square rooms, below), **ARENA** (one big room that gets harder every run, a benchmark) and **HANGAR** (E1M1, the Doom-style map in `map.txt`). Winning a level offers to play the same one again; the levels are separate maps, not an episode. Your points, purchases and unlocks are shared by all of them.
 
 ## ROOMS (the default level)
 
@@ -89,6 +90,29 @@ The other level is HANGAR (the second entry on the level select).
 
 `make_rooms.py` (next to
 `sprites_tool.py`, not needed to play) generates a rooms map like this one: `python make_rooms.py map_rooms.txt [seed]` (the seed changes where the barrels fall).
+
+## ARENA (the benchmark level)
+
+`map_arena.txt`: a small start room with the store cabinet, a door, and **one square room** (30 x 30, the size of a ROOMS room). Nothing is placed in the map: when you start, the game
+scatters enemies over the big room: 16 at first plus 4 for every round, drawn from the zombies, sergeants, imps, demons, cacodemons, lost souls, barons, the three tanks and the cryobus,
+plus Pain Elementals (1, then +1 every two rounds) and Arch-viles (from round 3, +1 every three rounds), which keep summoning more. **Clear the room (every enemy dead, summons and the tanks' zombies included) to win.**
+
+**Every death AND every clear makes the next run harder** (the round is saved in `doom_progress.txt`; `--reset` zeroes it). Per round, all enemies get: **+15% hit points, +10% damage to you,
++10% attack rate** (this also makes summoners summon more often), **+5% shot speed** (up to 3x), **+5% walking speed** (up to 2.5x) and **+15% summoning**: how many enemies a summoner may have alive,
+the game-wide summon cap (`TUNING.maxEnemies`) and how many it summons per cast, and a shorter warning before they appear. The numbers are `growth` in the ARENA entry of `LEVELS`; set a large round in
+`doom_progress.txt` (`"arena": 60`) to jump straight to a heavy one. It is meant for finding out how much the game can take before it slows down or crashes.
+
+### Performance log
+
+Every run on any level is measured while you play and logged when it ends (death, win, or quitting after about ten seconds of play):
+
+- **Terminal and end screen:** a one-line summary, for example `ARENA round 3 DIED: 24.8 fps, work 11 avg / 19 p95 / 41 max ms (budget 40), peak 120 enemies 60 shots, 4 slow frames, 0 ms dropped, first slowdown at 38s with 140 enemies`.
+  *Work* is the time spent updating, drawing and updating the HUD per frame (the budget is 40 ms for 25 fps); above it the game slows down.
+- **`doom_bench.txt`:** one JSON line is appended per run (version, level, round, result, seconds, kills, average fps, work avg/p50/p95/p99/max, update and render time, slow frames,
+  dropped simulation time, peaks of enemies / projectiles / effects / DOM sprites / JS heap, the first second with a slowdown and how many enemies were alive then, and a per-second timeline
+  `[second, fps, avg work, max work, avg update, avg render, enemies, projectiles, effects, DOM sprites, heap MB]`). Read it with `cat doom_bench.txt` in the terminal or copy it out of the game's
+  file editor. `--reset` does not clear it. Cheat-flag runs are marked.
+- **F3** shows a live line (fps, work ms, enemies, projectiles) in the HUD in place of the position.
 
 ## HANGAR (E1M1)
 
@@ -116,6 +140,8 @@ Enter (or B) buys, Esc closes; or click a tab, a row or its BUY button. Purchase
 A consumable is only used up when it would do something (not when health is full, the power-up is still running, or the weapon needs no ammo). Prices and items are
 the `STORE` table near the top of `doom.js` (first guesses: tune them to how many points a run earns); the old pickup types in `PICKUPS` still exist and the
 consumables reuse them.
+
+**Enemy shots are 50% faster than their listed speed** (`TUNING.enemyProjectileSpeed` in `doom.js`, 1.5; set it to 1 for the original speed). Your own weapons are unaffected.
 
 ## Checkpoints
 
