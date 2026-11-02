@@ -175,12 +175,14 @@ const SPRITE_ALIASES = {
 // ─── LEVELS ─────────────────────────────────────────────────────────────────
 // Chosen on the title screen with Up/Down (selLevel). name: shown on the level banner, automap and end screen (the part before the colon is what the run
 // history records). par: seconds shown as the par time. Each map is a text file in the same folder as doom.js. Winning a level offers to play it again (it does not move on to the
-// next entry; the levels are separate maps, not an episode). Dying restarts the level with what the store gives you. To add a level, copy a line and name your file.
+// next entry; the levels are separate maps, not an episode).
+// Optional level flags: keyDrops (each map Arch-vile you kill drops the next keycard, KEYS order, see reachCheckpoint) and winOnArchviles (killing all of the map's
+// Arch-viles wins the level, instead of or as well as an exit tile). Dying restarts the level with what the store gives you. To add a level, copy a line and name your file.
 // (install.js looks for the property name `map` + a colon + a quoted file name in this repo's doom.js to know
 // which map files to download, so keep that spelling.)
 const LEVELS = [
-  { name: 'ROOMS: Square rooms', map: 'map_rooms.txt', par: 600 },   // seven square rooms in a snake, one locked door between each (built by make_rooms.py)
-  { name: 'HANGAR: The old map', map: ASSETS.map, par: 180 },   // the first hand-drawn map (caves, six Arch-viles behind coloured doors)
+  { name: 'ROOMS: Square rooms', map: 'map_rooms.txt', par: 600, keyDrops: true, winOnArchviles: true },   // seven square rooms in a snake, one locked door between each (built by make_rooms.py)
+  { name: 'HANGAR: E1M1', map: ASSETS.map, par: 300 },   // the hand-drawn Doom-style map: enemies, pickups, keys on the map, an Arch-vile boss in front of the exit
 ];
 
 // Names of the sounds the game itself plays (keys in audio.json)
@@ -992,7 +994,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '103';
+  const VERSION = '104';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -3496,13 +3498,13 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   function reachCheckpoint(e) {
     const dead = [...(checkpoint?.level === levelIndex ? checkpoint.dead : []), e.spawnIdx];
     health = Math.min(Math.max(STAT_MAX.health, health), health + TUNING.checkpointHeal);
-    const nextKey = Object.keys(KEYS).find(k => !heldKeys.has(k));
+    const nextKey = LEVELS[levelIndex].keyDrops ? Object.keys(KEYS).find(k => !heldKeys.has(k)) : undefined;   // (only on levels with keyDrops: the others have keys lying on the map)
     if (nextKey) heldKeys.add(nextKey);
     const before = threatMult('hp'); checkpoint = { level: levelIndex, dead, keys: [...heldKeys] };
     const grow = threatMult('hp') / before;
     for (const x of enemies) if (x.alive && !x.def.prop) { x.hp *= grow; x.maxHp *= grow; }   // everything still alive gets tougher too
     if (!CHEATING && dead.length > avBest) { avBest = dead.length; saveDirty = true; flash2 = `STORE: ${WEAPONS[STORE.find(i => i.unlock === avBest)?.weapon]?.name ?? ''} UNLOCKED`; }
-    if (avTotal && !enemies.some(x => x.spawnIdx !== undefined && x.alive)) { winLevel('ALL ARCH-VILES DEAD!'); return; }
+    if (LEVELS[levelIndex].winOnArchviles && avTotal && !enemies.some(x => x.spawnIdx !== undefined && x.alive)) { winLevel('ALL ARCH-VILES DEAD!'); return; }
     play(SOUNDS.weaponPickup, 0.8);
     flash(`CHECKPOINT!  +${TUNING.checkpointHeal} HEALTH${nextKey ? '  ' + KEYS[nextKey].name : ''}${flash2 ? '  -  ' + flash2 : ''}  -  ENEMIES GROW STRONGER`, 60, 'secret');
     flash2 = '';

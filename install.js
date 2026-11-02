@@ -5,11 +5,12 @@ export async function main(ns) {
   const BRANCH = 'main';
   const RAW_BASE = `https://raw.githubusercontent.com/${REPO_USER}/${REPO_NAME}/${BRANCH}`;
 
-  // doom.js first, then the data it reads. Extra level maps (any `map: 'file.txt'` in doom.js's LEVELS) are added below.
+  // doom.js first, then the data it reads (every level's map file is listed here). Any other `map: 'file.txt'` in doom.js's LEVELS is also added below.
   // Run this again whenever the game prints "New version available": it replaces every file listed here.
   const FILES = [
     ['doom.js', ''],
     ['map.txt', ''],
+    ['map_rooms.txt', ''],
     ['audio.json', ' (this may take a moment)'],
     ['sprites.json', ' (this may take a moment)'],
   ];

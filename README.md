@@ -73,7 +73,7 @@ within 16 tiles of you (`AUTOMAP_ITEM_RADIUS`), weapons, armor and power-ups nev
 
 ## Choosing a level
 
-On the title screen, **Up/Down choose the level** and Left/Right the difficulty. There are two: **ROOMS** (square rooms, below) and **HANGAR** (the old hand-drawn map in `map.txt`, with caves and six Arch-viles behind coloured doors). Winning a level offers to play the same one again; the levels are separate maps, not an episode. Your points, purchases and unlocks are shared by both.
+On the title screen, **Up/Down choose the level** and Left/Right the difficulty. There are two: **ROOMS** (square rooms, below) and **HANGAR** (E1M1, the Doom-style map in `map.txt`, below). Winning a level offers to play the same one again; the levels are separate maps, not an episode. Your points, purchases and unlocks are shared by both.
 
 ## ROOMS (the default level)
 
@@ -85,8 +85,19 @@ drops the keycard for the next door (blue, red, yellow, green, purple; see "Chec
 **The level is a roguelike:** the map holds no ordinary enemies, only barrels and the Arch-viles; what you fight is whatever they summon. There are no pickups at all (no health, ammo, weapons,
 armor, keys or power-ups): everything is in the store (see below). The walls, floor, ceiling and sky are the stone textures from `sprites.json`; there is no decoration.
 
-The old Hangar map (with its caves, secret room and decorations) is still in `map.txt` and is the second entry on the level select. `make_rooms.py` (next to
+The other level is HANGAR (the second entry on the level select).
+
+`make_rooms.py` (next to
 `sprites_tool.py`, not needed to play) generates a rooms map like this one: `python make_rooms.py map_rooms.txt [seed]` (the seed changes where the barrels fall).
+
+## HANGAR (E1M1)
+
+`map.txt` is a Doom-style level: about 230 enemies (zombies, sergeants, imps, demons, cacodemons, lost souls, pain elementals, barons, tanks and a cryobus), nearly 250 pickups
+(ammo, health, armor, weapons, power-ups), three locked doors with their keycards lying on the map (blue, red, yellow), a secret room (with armor) and exploding barrels.
+You start in the south-east in a safe room with the three arcade cabinets (the store is one of them). The route to the exit runs west: first hall (blue key) -> blue door -> a small room ->
+a cave -> the big northern caves; the red key is in the room on the north-east side, the yellow key in the room west of the middle. **The boss is an Arch-vile** standing in the cave
+in front of the **exit** (far west), shielded until 20 of its summons are dead. Reaching the exit wins. The map has no decoration (add your own with the characters in the decoration table).
+Killing the Arch-vile is optional but is a checkpoint (see below), and a kill counts for the store's weapon unlocks. Keys, weapons and ammo you pick up are for that run only, as before.
 
 ## Points and the store
 
@@ -108,10 +119,9 @@ consumables reuse them.
 
 ## Checkpoints
 
-Every Arch-vile the map places is a checkpoint when it dies: you get **+50 health** (`TUNING.checkpointHeal`, never above 100) and **the next keycard** (blue, red, yellow, green, then purple).
-On the first level each Arch-vile's area is behind a locked door that takes the previous Arch-vile's keycard, so they can only be killed in one order and you can never be stuck
-without a key. If you die afterwards you restart **at the start of the level** (so you can use the store first), with every Arch-vile you already killed still dead and your keys kept.
-**Every Arch-vile you kill also makes all enemies tougher** (`TUNING.threat`: +10% hit points and +5% damage to you per kill, stacking, for the rest of the run; enemies already alive are toughened too, and nukage is not scaled). The level is won when **every Arch-vile is dead**. Starting a new game or a new level clears the checkpoint, and it is kept only while the script runs (closing the game
+Every Arch-vile the map places is a checkpoint when it dies: you get **+50 health** (`TUNING.checkpointHeal`, never above 100). On ROOMS (level flag `keyDrops`) it also drops **the next keycard** (blue, red, yellow, green, then purple);
+each Arch-vile's area is behind a locked door that takes the previous Arch-vile's keycard, so they can only be killed in one order and you can never be stuck without a key. On HANGAR the keys lie on the map. If you die afterwards you restart **at the start of the level** (so you can use the store first), with every Arch-vile you already killed still dead and your keys kept.
+**Every Arch-vile you kill also makes all enemies tougher** (`TUNING.threat`: +10% hit points and +5% damage to you per kill, stacking, for the rest of the run; enemies already alive are toughened too, and nukage is not scaled). On ROOMS (flag `winOnArchviles`) the level is won when **every Arch-vile is dead**; HANGAR is won at its exit. Starting a new game or a new level clears the checkpoint, and it is kept only while the script runs (closing the game
 forgets it; points and purchases are saved separately). Keycards used to be sold in the store; if your save has any, their price is refunded as points.
 
 **Run history.** Every run, whether you die or win, is recorded (result, time, kills, score, and the health and weapons you started with)
