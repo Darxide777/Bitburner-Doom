@@ -561,15 +561,20 @@ const PROJECTILES = {
 //  onDeath    also takes (all optional, any combination):
 //             smoke: ['TANKSMOKE1', ...]  a few smoke puffs (one random type each, "<Type>_idle1..N" played once) over the wreck
 //             debris: 'TANKGUN'           two pieces ("<Type>_idle1..N" tumbling) thrown out to the sides, then lying on the floor
-//             spawn: { types: ['ZOMBIE','ZOMBIESERGEANT'], at: 12 }  something climbs out of the wreck: one random type, awake and
-//                    hunting, `at` ticks into the death animation. Like summoned enemies it gives no kill or points.
+//             spawn: { types: ['ZOMBIE','ZOMBIESERGEANT'], at: 12, count: 4 }  `count` enemies (default 1) climb out of the wreck, each one a
+//                    random pick from `types`, spread round it, awake and hunting, `at` ticks into the death animation. Like summoned
+//                    enemies they count as kills and points.
 //  prop       true = scenery you can shoot (the exploding barrel): never moves or attacks, gives no kills or points,
 //             and is not part of the end-screen kill total. Its art is "<Type>_idle1..." (any number of frames, looped)
 //             and "<Type>_death1..." (the explosion, 2 ticks per frame, then it disappears).
 //  blob       { tag, chars, size }  ASCII body drawn while the enemy has no PNG walk sprites yet (same format as
 //             PROJECTILES blob). Once "<Type>_walk1" exists in sprites.json the art takes over by itself.
-//  spawnable  false = an 'any' spawner never picks this type (Arch-vile so it can't summon more Arch-viles)
+//  spawnable  false = an 'any' spawner (the Arch-vile) never picks this type. Used for the Arch-vile itself, and for the zombie, zombie
+//             sergeant and lost soul, which the tanks and the Pain Elemental already produce. A spawner (or a tank's onDeath.spawn) that
+//             names a type directly still makes it.
 //  spawnWeight  relative chance of being picked by an 'any' spawner (default 1; bosses are rare)
+//  spawnGroup   enemies with the same group name (the three tanks: 'tank') are one entry in an 'any' spawner's roll, with the group's highest
+//               spawnWeight; when it comes up, one member is chosen at random
 //  painChance chance (0-1) that a hit makes it flinch for TUNING.painTicks (no moving or attacking)
 //  flee          { dist, ticks, speed } makes the enemy run AWAY from a player it can see: whenever the player is closer than `dist`
 //                tiles, and for `ticks` ticks after every successful summon. Used by the spawners so they can't be picked off.
@@ -595,7 +600,7 @@ const PROJECTILES = {
 // `hitbox` (what bullets hit) and `radius` (clearance from walls when moving) are different things.
 const ENEMY_DEFAULTS = {
   hp: 1, hitbox: 0.6, radius: 0.35, speed: 0.011, sight: 12, roam: 8, painChance: 0.25, stopDistance: 0, wakeOnDoor: false, relentless: false,
-  blob: null, spawnable: true, spawnWeight: 1, prop: false,
+  blob: null, spawnable: true, spawnWeight: 1, spawnGroup: null, prop: false,
   points: 50, killMsg: '- ENEMY DOWN -', boss: false,
   anim: { walk: 400, attack: 150 },
   render: { zoom: 1, near: 1.5, fall: 0.8, corpse: true, float: false },
@@ -604,7 +609,7 @@ const ENEMY_DEFAULTS = {
 
 const ENEMIES = {
   ZOMBIE: {
-    mapChar: 'z', hp: 1, points: 50, killMsg: '- ZOMBIE DOWN -',
+    mapChar: 'z', hp: 1, points: 50, killMsg: '- ZOMBIE DOWN -', spawnable: false,   // spawnable: false = the Arch-vile's 'any' pool skips it (tanks already release it)
     sounds: { hurt: 'zombieinjured', death: 'zombiedeath' },
     render: { zoom: 3.8 },   // see ENEMY SIZE note
     attacks: [
@@ -614,7 +619,7 @@ const ENEMIES = {
   },
   // Shotgun zombie: tougher than the plain Zombie and fires a wider, heavier blast of pellets. Art: Zombie_Sergeant_*
   ZOMBIESERGEANT: {
-    mapChar: 'Z', hp: 2, points: 90, killMsg: '- ZOMBIE SERGEANT DOWN -',
+    mapChar: 'Z', hp: 2, points: 90, killMsg: '- ZOMBIE SERGEANT DOWN -', spawnable: false,   // as for the zombie
     sounds: { hurt: 'zombiesergeantinjured', death: 'zombiesergeantdeath' },
     render: { zoom: 3.8 },   // see ENEMY SIZE note
     attacks: [
@@ -657,7 +662,7 @@ const ENEMIES = {
     ],
   },
   LOSTSOUL: {
-    mapChar: 'l', hp: 1, points: 75, killMsg: '* LOST SOUL DESTROYED *',
+    mapChar: 'l', hp: 1, points: 75, killMsg: '* LOST SOUL DESTROYED *', spawnable: false,   // the Pain Elemental names it directly, so it still makes them
     anim: { walk: 200 },
     render: { zoom: 3.2, corpse: false, float: true }, painChance: 0,
     sounds: { hurt: 'lostsoulinjured', death: 'lostsouldeath' },
@@ -710,7 +715,7 @@ const ENEMIES = {
   // scale / fall are guesses (fall 0.5 drops the low wreck onto the floor): tune them in play.
   ZOMBIETANK: {
     mapChar: 'g', hp: 12, points: 350, killMsg: '** ZOMBIE TANK DESTROYED **',
-    speed: 0.010, sight: 16, roam: 12, hitbox: 0.85, radius: 0.45, painChance: 0.08, spawnWeight: 0.5,
+    speed: 0.010, sight: 16, roam: 12, hitbox: 0.85, radius: 0.45, painChance: 0.08, spawnWeight: 0.5, spawnGroup: 'tank',
     anim: { walk: 220 }, render: { zoom: 3.8, fall: 0.5 },
     blob: { tag: '\x1E', chars: '#*:.', size: 0.6 },
     sounds: { hurt: 'zombietankinjured', death: 'zombietankdeath' },
@@ -721,12 +726,12 @@ const ENEMIES = {
     onDeath: {
       explode: { radius: 2.2, damage: 8, label: 'TANK EXPLOSION!', sound: 'zombietankexplode', hurtsEnemies: true, falloff: true, art: 'TANKEXPLOSION', scale: 3, blob: { tag: '\x1B', chars: '@*+.', size: 1.5, ttl: 8 } },
       smoke: ['TANKSMOKE1', 'TANKSMOKE2', 'TANKSMOKE3', 'TANKSMOKE4'], debris: 'TANKGUN',
-      spawn: { types: ['ZOMBIE', 'ZOMBIESERGEANT'], at: 12 },
+      spawn: { types: ['ZOMBIE', 'ZOMBIESERGEANT'], at: 12, count: 4 },
     },
   },
   ZOMBIEMISSILETANK: {
     mapChar: '8', hp: 14, points: 500, killMsg: '** MISSILE TANK DESTROYED **',
-    speed: 0.009, sight: 18, roam: 12, hitbox: 0.85, radius: 0.45, painChance: 0.06, spawnWeight: 0.4,
+    speed: 0.009, sight: 18, roam: 12, hitbox: 0.85, radius: 0.45, painChance: 0.06, spawnWeight: 0.4, spawnGroup: 'tank',
     anim: { walk: 220 }, render: { zoom: 3.8, fall: 0.5 },
     blob: { tag: '\x18', chars: '#*:.', size: 0.6 },
     sounds: { hurt: 'zombietankinjured', death: 'zombietankdeath' },
@@ -737,12 +742,12 @@ const ENEMIES = {
     onDeath: {
       explode: { radius: 2.2, damage: 8, label: 'TANK EXPLOSION!', sound: 'zombietankexplode', hurtsEnemies: true, falloff: true, art: 'TANKEXPLOSION', scale: 3, blob: { tag: '\x1B', chars: '@*+.', size: 1.5, ttl: 8 } },
       smoke: ['TANKSMOKE1', 'TANKSMOKE2', 'TANKSMOKE3', 'TANKSMOKE4'], debris: 'TANKMISSILEGUN',
-      spawn: { types: ['ZOMBIE', 'ZOMBIESERGEANT'], at: 12 },
+      spawn: { types: ['ZOMBIE', 'ZOMBIESERGEANT'], at: 12, count: 4 },
     },
   },
   ZOMBIEPLASMATANK: {
     mapChar: '9', hp: 12, points: 450, killMsg: '** PLASMA TANK DESTROYED **',
-    speed: 0.010, sight: 16, roam: 12, hitbox: 0.85, radius: 0.45, painChance: 0.08, spawnWeight: 0.4,
+    speed: 0.010, sight: 16, roam: 12, hitbox: 0.85, radius: 0.45, painChance: 0.08, spawnWeight: 0.4, spawnGroup: 'tank',
     anim: { walk: 220 }, render: { zoom: 3.8, fall: 0.5 },
     blob: { tag: '\x1C', chars: '#*:.', size: 0.6 },
     sounds: { hurt: 'zombietankinjured', death: 'zombietankdeath' },
@@ -753,7 +758,7 @@ const ENEMIES = {
     onDeath: {
       explode: { radius: 2.2, damage: 8, label: 'TANK EXPLOSION!', sound: 'zombietankexplode', hurtsEnemies: true, falloff: true, art: 'TANKEXPLOSION', scale: 3, blob: { tag: '\x1B', chars: '@*+.', size: 1.5, ttl: 8 } },
       smoke: ['TANKSMOKE1', 'TANKSMOKE2', 'TANKSMOKE3', 'TANKSMOKE4'], debris: 'TANKPLASMAGUN',
-      spawn: { types: ['ZOMBIE', 'ZOMBIESERGEANT'], at: 12 },
+      spawn: { types: ['ZOMBIE', 'ZOMBIESERGEANT'], at: 12, count: 4 },
     },
   },
   CRYOBUS: {
@@ -939,7 +944,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '86';
+  const VERSION = '89';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -3310,12 +3315,25 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   const countLevelEnemies = () => summonedTotal + enemies.reduce((n, e) => n + (e.spawned || e.def.prop ? 0 : 1), 0);
 
   // SPAWNER ATTACKS (kind 'spawn'). Picks an enemy type from atk.spawn: one id, a list of ids, or 'any' (every type
-  // not marked spawnable:false), weighted by ENEMIES[id].spawnWeight.
+  // not marked spawnable:false), weighted by ENEMIES[id].spawnWeight. Enemies that share a `spawnGroup` (the three tanks) are ONE entry in
+  // that roll, with the highest weight of the group; if the entry wins, one member is picked at random. So a group takes one slot in the
+  // table however many members it has, and every member can still come up.
   function pickSpawnType(spec) {
     const ids = spec === 'any' ? Object.keys(ENEMIES).filter(id => ENEMIES[id].spawnable !== false) : [].concat(spec);
-    let r = Math.random() * ids.reduce((sum, id) => sum + ENEMIES[id].spawnWeight, 0);
-    for (const id of ids) { r -= ENEMIES[id].spawnWeight; if (r < 0) return id; }
-    return ids[ids.length - 1];
+    const entries = [], groups = {};
+    for (const id of ids) {
+      const g = spec === 'any' ? ENEMIES[id].spawnGroup : null, w = ENEMIES[id].spawnWeight;
+      if (!g) entries.push({ ids: [id], w });
+      else if (groups[g]) { groups[g].ids.push(id); groups[g].w = Math.max(groups[g].w, w); }
+      else { groups[g] = { ids: [id], w }; entries.push(groups[g]); }
+    }
+    let r = Math.random() * entries.reduce((sum, en) => sum + en.w, 0);
+    for (const en of entries) {
+      r -= en.w;
+      if (r < 0) return en.ids[Math.floor(Math.random() * en.ids.length)];
+    }
+    const last = entries[entries.length - 1];
+    return last.ids[Math.floor(Math.random() * last.ids.length)];
   }
   // Summons up to atk.count enemies in free floor 1.2-2.5 tiles from `parent`, in its line of sight and not on top of
   // the player or another enemy. It does not create them at once: each spot gets a fire-spike WARNING (art
@@ -3423,20 +3441,26 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       }
     }
   }
-  // onDeath.spawn: something climbs out of the wreck (one random type from sp.types), awake and hunting. It tries a few
-  // spots around the wreck and falls back to the wreck's own tile. No cap (a tank only ever makes one). Flagged
-  // `spawned` like summoned enemies (points but no kill, no corpse left behind); it hunts you if its tank did.
+  // onDeath.spawn: sp.count enemies climb out of the wreck (each a random type from sp.types), awake and hunting. Each tries a few
+  // spots round the wreck (spread out, not on each other) and falls back to the wreck's own tile. No cap (a tank does this once, when it
+  // dies). Flagged `spawned` like summoned enemies (kills and points, no corpse left behind); they hunt you if their tank did.
   function deathSpawn(e, sp) {
-    const type = sp.types[Math.floor(Math.random() * sp.types.length)], r = ENEMIES[type].radius;
-    let x = e.x, y = e.y;
-    for (let tries = 0; tries < 8; tries++) {
-      const a = Math.random() * Math.PI * 2, d = 0.6 + Math.random() * 0.4, tx = e.x + Math.cos(a) * d, ty = e.y + Math.sin(a) * d;
-      if (!solidAt(tx + r, ty) && !solidAt(tx - r, ty) && !solidAt(tx, ty + r) && !solidAt(tx, ty - r) && hasLineOfSight(e.x, e.y, tx, ty)) { x = tx; y = ty; break; }
+    const placed = [], base = Math.random() * Math.PI * 2, n = sp.count ?? 1;
+    for (let i = 0; i < n; i++) {
+      const type = sp.types[Math.floor(Math.random() * sp.types.length)], r = ENEMIES[type].radius;   // each one picks its own type
+      let x = e.x, y = e.y;
+      // spots spread round the wreck (one slice of the circle each, then random ones), not on top of the ones already placed
+      for (let tries = 0; tries < 12; tries++) {
+        const a = tries === 0 ? base + i * (Math.PI * 2 / n) : Math.random() * Math.PI * 2, d = 0.7 + Math.random() * 0.7;
+        const tx = e.x + Math.cos(a) * d, ty = e.y + Math.sin(a) * d;
+        if (!solidAt(tx + r, ty) && !solidAt(tx - r, ty) && !solidAt(tx, ty + r) && !solidAt(tx, ty - r) && hasLineOfSight(e.x, e.y, tx, ty)
+          && !placed.some(o => Math.hypot(o.x - tx, o.y - ty) < o.r + r)) { x = tx; y = ty; break; }
+      }
+      const m = makeEnemy(type, x, y);
+      m.spawned = true; m.memX = px; m.memY = py; m.memTicks = TUNING.alertMemoryTicks; m.hunt = e.hunt;
+      enemies.push(m); summonedTotal++; placed.push({ x, y, r });
+      effects.push({ x, y, ttl: 8, sprite: false, anim: 'impact', blob: { tag: '\x19', chars: '*+.', size: 0.9 } });
     }
-    const m = makeEnemy(type, x, y);
-    m.spawned = true; m.memX = px; m.memY = py; m.memTicks = TUNING.alertMemoryTicks; m.hunt = e.hunt;
-    enemies.push(m); summonedTotal++;
-    effects.push({ x, y, ttl: 8, sprite: false, anim: 'impact', blob: { tag: '\x19', chars: '*+.', size: 0.9 } });
   }
 
   // Executes one attack entry that has already passed its range/chance/line-of-sight roll. Plays the sound, starts the

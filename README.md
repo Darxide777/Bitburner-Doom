@@ -138,9 +138,9 @@ ignored.
 | `Y` | Cyberdemon | boss, rockets |
 | `M` | Spider Mastermind | boss, chaingun (a stream of single bullets) |
 | `L` | Pain Elemental | spawner: summons Lost Souls (a fire spike warns where each one will appear) |
-| `V` | Arch-vile | spawner: summons a random enemy from anywhere in the game (same fire-spike warning). Asleep until you open a door into its room (or see it); from then on it summons non-stop and wanders its room, even when you are far away, and what it summons hunts you for good. **Invulnerable until 20 of its own summons are dead** (a message shows how many are left). |
+| `V` | Arch-vile | spawner: summons a random enemy (not a zombie, zombie sergeant, lost soul or another Arch-vile: the tanks and the Pain Elemental already make those), with a fire-spike warning. The three tanks count as one entry in its roll (`spawnGroup: 'tank'`): when that entry comes up, one of the three is picked at random. Asleep until you open a door into its room (or see it); from then on it summons non-stop and wanders its room, even when you are far away, and what it summons hunts you for good. **Invulnerable until 20 of its own summons are dead** (a message shows how many are left). |
 
-Summoned enemies count like any other: their points go into your score and they add to your kills (and to the kill total on the end screen). A spawner never has more than a few alive at once (`maxAlive` per spawner: 4 for the Arch-vile, 8 for the Pain Elemental), and `TUNING.maxEnemies` (40) caps all summoned enemies alive together. Enemies that climb out of a destroyed tank are not capped. To put an ordinary enemy on the map, just use its letter in `map.txt` as before.
+Summoned enemies count like any other: their points go into your score and they add to your kills (and to the kill total on the end screen). A spawner never has more than a few alive at once (`maxAlive` per spawner: 4 for the Arch-vile, 8 for the Pain Elemental), and `TUNING.maxEnemies` (40) caps all summoned enemies alive together. Each destroyed tank (the zombie, missile and plasma tanks) releases 4 enemies, each randomly a zombie or a zombie sergeant (`onDeath.spawn` with `count: 4`), and those are not capped. To put an ordinary enemy on the map, just use its letter in `map.txt` as before.
 
 **Scenery**
 
