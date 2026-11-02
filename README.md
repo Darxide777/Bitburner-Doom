@@ -161,7 +161,7 @@ game ignores the keyboard while it is open, so you can type in Bitburner; close 
 blocked from loading in a frame (the desktop app can do that); the header has an [open in a tab] link for that case.
 The web version keeps its own save, separate from your Steam one. **The DOOM cabinet (`A`).** Same overlay as the Bitburner one, but it loads the Internet Archive's playable copy of the shareware episode
 of the original DOS DOOM (`TUNING.doomUrl`; the [open in a tab] link goes to its details page). The Archive runs it in an emulator inside
-the frame; click the frame once so it gets the keyboard. The game itself is not stored in this project, only the link. If the frame
+the frame; click the frame once so it gets the keyboard. The game itself is not stored in this project, only the link. The DOOM page is loaded in a fixed 960x600 frame (`TUNING.doomFrame`, the size the Archive draws the game at) and scaled to fit the overlay, so the game fills it instead of sitting small in a corner; set `doomFrame: null` to stretch the frame instead. If the frame
 stays blank, use the tab link. All three cabinets are the same flame machine with a different sign and screen. They use `Arcade_Bitburner_idle1`,
 `Arcade_Doom_idle1` and `Arcade_Soon_idle1` (85x170 pixels each, `scale: 0.32` in `DECORATIONS`; picture height x scale
 should stay near 54 to keep them about 0.6 of a wall tall).

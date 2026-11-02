@@ -231,6 +231,7 @@ const DEFAULT_DIFFICULTY = 'normal';
 //   rangedReachView                true: ranged enemy attacks (and your pistol/shotgun/chaingun shots) reach as far as you can see (VIEW_DIST, up to 32
 //                                  tiles), so if you can see each other both sides can shoot. false: use each attack's own range max.
 //   useRange                       how far ahead (tiles) F can open a door or push a secret wall (it also tries a little to each side)
+//   doomFrame                      { w, h } the DOOM cabinet's page is loaded at this size and scaled to fit the overlay (null = stretch it)
 //   terminalUrl / doomUrl / terminalRange   the pages the `use: 'terminal'` (the Bitburner cabinet: web Bitburner) and `use: 'doom'` (the DOOM cabinet:
 //                                  shareware DOS DOOM on the Internet Archive) decorations open (see DECORATIONS `use`), and how close (tiles) you must stand
 //   spawnWarningTicks              how long the fire-spike warning shows before a spawner's (Pain Elemental, Arch-vile) enemy appears
@@ -250,6 +251,7 @@ const TUNING = {
   itemGrowth: 20,   // pickups, projectiles and effects grow as you approach, up to this many times their picture size. High on purpose: a low cap (it was 4) made big things such as the scale-3 explosions stop growing about 4 tiles away while the walls kept growing, so they looked smaller up close
   rangedReachView: true,   // ranged attacks and hitscan shots reach the whole view distance (see above)
   useRange: 2.0,   // how far ahead (tiles) F can reach a door or secret wall
+  doomFrame: { w: 960, h: 600 },   // size the DOOM page is loaded at, then scaled to fit the overlay (null = just stretch it). The player draws the game at 960x600
   doomUrl: 'https://archive.org/embed/DoomsharewareEpisode',   // the Internet Archive's playable shareware DOS DOOM (use: 'doom'); its details page is the "open in a tab" link
   terminalUrl: 'https://bitburner-official.github.io/',   // web version of Bitburner, opened by the terminal in the level
   terminalRange: 1.8,
@@ -882,7 +884,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '76';
+  const VERSION = '78';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1312,10 +1314,13 @@ export async function main(ns) {
   // does not walk you around) except Escape, which closes it. The page may refuse to load inside a frame (the desktop
   // app can); the header therefore also has a plain link to open it in a browser tab. Esc inside the frame never reaches
   // the game, so the [X] button is the sure way out. terminalResume remembers whether to unpause on close.
-  let terminalEl = null, terminalResume = false;
+  let terminalEl = null, terminalResume = false, terminalFit = null;
   // openTerminal(url, label, tabUrl): url is what the frame loads, label names it in the header, tabUrl is the plain link
   // (defaults to url; the Internet Archive's embed address is not the page you want in a tab, its details page is).
-  function openTerminal(url = TUNING.terminalUrl, label = 'TERMINAL', tabUrl = url) {
+  // fixed = { w, h } (optional): load the page in a w x h frame and scale that frame up or down to fit the overlay, instead of
+  // stretching the frame to the overlay. Used for the DOOM cabinet: the Internet Archive player draws the game at a fixed
+  // 960x600 in the corner of whatever space it gets, so a frame of exactly that size, scaled, fills the overlay properly.
+  function openTerminal(url = TUNING.terminalUrl, label = 'TERMINAL', tabUrl = url, fixed = null) {
     if (terminalEl) return;
     terminalResume = !paused;
     setPaused(true);
@@ -1339,13 +1344,31 @@ export async function main(ns) {
     bar.appendChild(title); bar.appendChild(x);
     const frame = doc.createElement('iframe');
     frame.src = url;
-    frame.style.cssText = 'flex:1;border:0;background:#111;';
-    terminalEl.appendChild(bar); terminalEl.appendChild(frame);
-    doc.body.appendChild(terminalEl);
+    if (fixed) {
+      const box = doc.createElement('div');
+      box.style.cssText = 'flex:1;position:relative;overflow:hidden;background:#000;';
+      frame.style.cssText = `position:absolute;left:0;top:0;width:${fixed.w}px;height:${fixed.h}px;border:0;background:#000;transform-origin:0 0;`;
+      const fit = () => {
+        const bw = box.clientWidth, bh = box.clientHeight;
+        if (!bw || !bh) return;
+        const k = Math.min(bw / fixed.w, bh / fixed.h);
+        frame.style.transform = `translate(${Math.round((bw - fixed.w * k) / 2)}px,${Math.round((bh - fixed.h * k) / 2)}px) scale(${k})`;
+      };
+      box.appendChild(frame);
+      terminalEl.appendChild(bar); terminalEl.appendChild(box);
+      doc.body.appendChild(terminalEl);
+      fit();
+      terminalFit = fit; win.addEventListener('resize', fit);
+    } else {
+      frame.style.cssText = 'flex:1;border:0;background:#111;';
+      terminalEl.appendChild(bar); terminalEl.appendChild(frame);
+      doc.body.appendChild(terminalEl);
+    }
   }
   function closeTerminal() {
     if (!terminalEl) return;
     terminalEl.remove(); terminalEl = null;
+    if (terminalFit) { win.removeEventListener('resize', terminalFit); terminalFit = null; }
     for (const k in keys) keys[k] = false;
     if (terminalResume) setPaused(false);
     root.focus();
@@ -1986,7 +2009,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     if (dec) {
       const use = DECORATIONS[dec.type].use;
       if (use === 'terminal') openTerminal();
-      else if (use === 'doom') openTerminal(TUNING.doomUrl, 'DOOM (DOS shareware, Internet Archive)', TUNING.doomUrl.replace('/embed/', '/details/'));
+      else if (use === 'doom') openTerminal(TUNING.doomUrl, 'DOOM (DOS shareware, Internet Archive)', TUNING.doomUrl.replace('/embed/', '/details/'), TUNING.doomFrame);
       else if (use === 'soon') flash('OUT OF ORDER - COMING SOON', 40);
       return;
     }
@@ -2908,7 +2931,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   // ─── MAIN GAME LOOP ─────────────────────────────────────────────────────────
   // Player tuning, all per tick: movement in tiles, turn in radians. The player is a square of half-width
   // PLAYER_RADIUS tested at its four corners, and x and y are tested separately so the player slides along walls.
-  const SPEED = 0.131, TURN = 0.065, STRAFE_SPEED = 0.122, PLAYER_RADIUS = 0.2;   // walking and strafing speed: tiles per tick (25% faster than 0.105 / 0.0975)
+  const SPEED = 0.164, TURN = 0.065, STRAFE_SPEED = 0.153, PLAYER_RADIUS = 0.2;   // walking and strafing speed: tiles per tick (originally 0.105 / 0.0975, then +25% twice: 0.131 / 0.122, now 0.164 / 0.153)
   // The player is a small square, not a point, so the camera can't poke into walls
   const canStand = (x, y) =>
     !solidAt(x - PLAYER_RADIUS, y - PLAYER_RADIUS) && !solidAt(x + PLAYER_RADIUS, y - PLAYER_RADIUS) &&
