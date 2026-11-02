@@ -200,6 +200,20 @@ const SOUND_FALLBACKS = {
 // Ammo is kept per TYPE (AMMO_TYPES); each weapon names the type it uses in `ammoType`. STAT_MAX caps health and
 // armor; ammo caps are in AMMO_TYPES. Nothing else enforces these caps.
 const START = { health: 100, armor: 0, weapons: ['pistol'] };   // weapons you begin with; starting ammo is AMMO_TYPES[].start
+// ROGUELIKE PROGRESSION. Every time you die and start over you begin the next run a little stronger. `deaths` (how many times
+// you have died; saved in PROGRESS_FILE so it survives closing the script; run with --reset to wipe it) decides the starting loadout:
+//   weapons        one more weapon per death, in this order, until you have them all (then no more are granted)
+//   healthPerDeath extra starting health per death, with no limit (the 100 cap only applies to health pickups)
+//   ammoPerDeath   extra starting ammo of each type per death, with no limit
+//   weaponAmmo     starting ammo of a type whose weapon you have unlocked, on top of the per-death growth (shells, rockets and cells
+//                  start at 0 otherwise, so a new weapon would be useless)
+const PROGRESSION = {
+  weapons: ['shotgun', 'chaingun', 'rocketlauncher', 'plasmarifle', 'chainsaw', 'bfg9000'],
+  healthPerDeath: 10,
+  ammoPerDeath: { bullets: 10, shells: 4, rockets: 2, cells: 10 },
+  weaponAmmo: { shells: 8, rockets: 4, cells: 40 },
+};
+const PROGRESS_FILE = 'doom_progress.txt';
 // Ammo types. start/max are in rounds. A weapon uses one of these ids as its ammoType (null = no ammo needed).
 const AMMO_TYPES = {
   bullets: { name: 'BULLETS', start: 50, max: 200 },
@@ -299,7 +313,7 @@ const MAP_TILES = {
   'P': { tile: 'floor', player: true },                // player start
   'E': { tile: 'exit' },
   'D': { tile: 'door' },
-  'S': { tile: 'secret', reward: { pickup: 'health', dx: 0, dy: 1 } },  // reward appears 1 tile south
+  'S': { tile: 'secret', reward: { pickup: 'armor', dx: 0, dy: 1 } },  // reward appears 1 tile south (armor: health and ammo no longer lie around, see PROGRESSION)
 };
 
 // ─── KEYS ───────────────────────────────────────────────────────────────────
@@ -532,8 +546,8 @@ const PROJECTILES = {
 //                       (any = every enemy that is not spawnable:false, picked by spawnWeight), count per use (default 1),
 //                       maxAlive = how many of ITS spawned enemies may be alive at once (default 4). Also limited by
 //                       TUNING.maxEnemies overall. The enemy appears TUNING.spawnWarningTicks after the attack, at a spot marked
-//                       by the Spawn_Warning art (see trySpawn). Spawned enemies are awake and hunting, and do not count as kills
-//                       or give points (kills are out of the enemies that were placed in the map).
+//                       by the Spawn_Warning art (see trySpawn). Spawned enemies are awake and hunting, and count as kills
+//                       and give points like any other (the end-screen kill total grows with every summon).
 //               melee:  damage, label, bypassArmor, ignoreCritical
 //  onDeath    { explode: { radius, damage, label, sound, hurtsEnemies, falloff, blob, art, scale, after } }  an explosion when it dies.
 //             art: 'TANKEXPLOSION' plays that picture ("<Art>_idle1..N", scale = its size) at the spot; after: 'die' makes it wait until
@@ -565,6 +579,11 @@ const PROJECTILES = {
 //                (melee enemies set it just inside their bite range; 0 = keep pushing in)
 //  wakeOnDoor    true = when the player opens a door into the room this enemy is in, it charges at the player
 //                from anywhere in that room (see wakeBeyondDoor; only that room, not the whole level)
+//  summoner      true = a spawner that, once ACTIVE, keeps summoning from anywhere (no line of sight or range needed) and keeps
+//                wandering about near where it started, even when you are far away. It becomes active when it sees you or, with
+//                wakeOnDoor, when you open a door into its room (that is how the Arch-viles work). `wanderSpeed` = tiles per tick
+//                while wandering (default: its normal speed). Whatever it summons hunts you for good (it knows where you are).
+//  invulnerable  { kills: N } = takes no damage until N of the enemies IT summoned have been killed (shown on screen). Used by the Arch-vile.
 //  relentless    true = while it is hunting (memory not expired) and can't see you, it finds a route to where you are
 //                NOW, not just where you were last seen. Without it, it finds a route to the remembered spot.
 // Merge rules (derived tables): top-level fields are overridden by the entry; `anim` and `render` are merged one
@@ -768,7 +787,7 @@ const ENEMIES = {
   // Spawners: no attack of their own, they summon enemies near themselves while they can see you.
   PAINELEMENTAL: {
     mapChar: 'L', hp: 20, points: 400, killMsg: '** PAIN ELEMENTAL DESTROYED **',
-    speed: 0.012, sight: 16, roam: 12, hitbox: 1.0, painChance: 0.2, flee: { dist: 8, ticks: 60, speed: 0.10 },
+    speed: 0.012, wanderSpeed: 0.04, summoner: true, sight: 16, roam: 12, hitbox: 1.0, painChance: 0.2, flee: { dist: 8, ticks: 60, speed: 0.10 },
     render: { zoom: 3.9, fall: 2.0, float: true }, spawnWeight: 0.5,
     blob: { tag: '\x1A', chars: '@O*.', size: 1.0 },
     sounds: { hurt: 'painelementalinjured', death: 'painelementaldeath' },
@@ -778,9 +797,12 @@ const ENEMIES = {
   },
   ARCHVILE: {
     mapChar: 'V', hp: 40, points: 1000, killMsg: '** ARCH-VILE BANISHED **',
-    // Fast and keeps its distance (stopDistance) while it summons a random enemy from anywhere in the game.
-    // spawnable: false so it can never summon another Arch-vile.
-    speed: 0.03, sight: 20, roam: 25, hitbox: 0.7, painChance: 0.1, stopDistance: 9, flee: { dist: 7, ticks: 70, speed: 0.12 }, relentless: true, spawnable: false,
+    // The heart of the roguelike level: one sits in every room, asleep, as far from the door as it can be. Opening a door into its room
+    // (wakeOnDoor) makes it ACTIVE (summoner): it summons a random enemy from anywhere in the game again and again and wanders its room,
+    // even when you are far away. It cannot be hurt until 20 of its summons have been killed (invulnerable). Keeps its distance
+    // (stopDistance) and flees when you come close. spawnable: false so it can never summon another Arch-vile.
+    speed: 0.03, wanderSpeed: 0.05, sight: 20, roam: 25, hitbox: 0.7, painChance: 0.1, stopDistance: 9, flee: { dist: 7, ticks: 70, speed: 0.12 }, relentless: true, spawnable: false,
+    wakeOnDoor: true, summoner: true, invulnerable: { kills: 20 },
     render: { zoom: 3.1, fall: 1.0 },
     blob: { tag: '\x19', chars: '@O*.', size: 0.6 },
     sounds: { hurt: 'archvileinjured', death: 'archviledeath' },
@@ -867,13 +889,14 @@ export async function main(ns) {
   //   --infiniteammo  weapons never run out of ammo
   //   --allweapons    start with every weapon and full ammo
   //   --noautoswitch  don't switch weapon automatically when the current one runs dry
+  //   --reset         forget your deaths and run history: start the roguelike progression (extra weapons, health and ammo) from zero
   //   --help          print this list and quit
   // Flags are read by ns.flags (the only way settings enter the game). A flag that isn't in FLAG_SCHEMA is reported and
   // ignored. If ns.flags is missing (some web-page converters) every flag is simply off.
-  const FLAG_SCHEMA = [['help', false], ['godmode', false], ['infiniteammo', false], ['allweapons', false], ['noautoswitch', false]];
+  const FLAG_SCHEMA = [['help', false], ['godmode', false], ['infiniteammo', false], ['allweapons', false], ['noautoswitch', false], ['reset', false]];
   const flags = typeof ns.flags === 'function' ? ns.flags(FLAG_SCHEMA) : Object.fromEntries(FLAG_SCHEMA);
   if (flags.help) {
-    ns.tprint('doom.js flags:  --godmode (no damage)  --infiniteammo  --allweapons (every weapon, full ammo)  --noautoswitch (no automatic weapon switch)  --help');
+    ns.tprint('doom.js flags:  --godmode (no damage)  --infiniteammo  --allweapons (every weapon, full ammo)  --noautoswitch (no automatic weapon switch)  --reset (forget your deaths, run history and the bonuses)  --help');
     return;
   }
   const unknownFlags = Object.keys(flags).filter(k => k !== '_' && !FLAG_SCHEMA.some(f => f[0] === k)).map(k => `--${k}`).concat((flags._ || []).map(String));
@@ -881,13 +904,42 @@ export async function main(ns) {
   const INFINITE_HEALTH = !!flags.godmode;
   const INFINITE_AMMO = !!flags.infiniteammo;
   const ALL_WEAPONS = !!flags.allweapons;
+  // SAVED PROGRESS (PROGRESS_FILE, JSON text): `deaths` (see PROGRESSION) and `runs`, the history of every run you have finished, which keeps
+  // growing after you win (only the last MAX_RUNS are kept). A run is one attempt, ended by dying or by reaching the exit; each entry is
+  //   { n: run number, r: 'DIED' | 'WON', lv: level, t: seconds, k: kills, kt: kill total, sc: score, hp: health you started with,
+  //     w: weapons you started with, ch: true if cheat flags were on }
+  // Read at start, written whenever a run ends. A missing or unreadable file means a fresh start; an older file holding just a number
+  // is read as the death count. The end screen shows the last few runs as bars, and H opens the full history (see historyLines).
+  let deaths = 0, runs = [];
+  if (!flags.reset) {
+    try {
+      const raw = String(ns.read(PROGRESS_FILE) || '').trim();
+      if (raw.startsWith('{')) {
+        const o = JSON.parse(raw);
+        deaths = Math.max(0, Math.floor(Number(o.deaths)) || 0);
+        runs = Array.isArray(o.runs) ? o.runs.filter(x => x && typeof x === 'object' && Number.isFinite(x.sc) && Number.isFinite(x.t)) : [];
+      } else deaths = Math.max(0, parseInt(raw, 10) || 0);
+    } catch (e) { deaths = 0; runs = []; }
+  }
+  const MAX_RUNS = 200;
+  const CHEATING = INFINITE_HEALTH || INFINITE_AMMO || ALL_WEAPONS;
+  const saveProgress = () => { try { ns.write(PROGRESS_FILE, JSON.stringify({ deaths, runs: runs.slice(-MAX_RUNS) }), 'w'); } catch (e) { } };
+  if (flags.reset) saveProgress();
+  // Adds the run that just ended (result 'DIED' or 'WON') to the history and saves it. Call once, after endTime and score are final.
+  function recordRun(result) {
+    const t = Math.max(0, Math.floor(((endTime || Date.now()) - gameStartTime) / 1000));
+    runs.push({ n: (runs.length ? runs[runs.length - 1].n : 0) + 1, r: result, lv: LEVELS[levelIndex].name.split(':')[0], t, k: kills, kt: countLevelEnemies(),
+      sc: score, hp: Math.round(levelStart?.health ?? health), w: levelStart?.owned.length ?? owned.size, ch: CHEATING || undefined });
+    if (runs.length > MAX_RUNS) runs.splice(0, runs.length - MAX_RUNS);
+    saveProgress();
+  }
   const AUTO_SWITCH_EMPTY = !flags.noautoswitch; // Switch to a weapon that has ammo when the current one runs dry
   // ─── VERSION CHECK ───────────────────────────────────────────────────────
   // There is no auto-update. On start the script fetches doom.js from the GitHub repo, reads ITS version with a regex on
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '82';
+  const VERSION = '86';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1140,7 +1192,7 @@ export async function main(ns) {
   // World position (px, py) is in tile units; pa is the view angle in radians (never wrapped, so it can grow without
   // bound; use angleDiff() or the double-modulo pattern when comparing angles).
   let px = 0, py = 0, pa = -Math.PI / 2;   // set from the map by startLevel()
-  let health = START.health, armor = START.armor, kills = 0, score = 0;
+  let health = START.health, armor = START.armor, kills = 0, score = 0, summonedTotal = 0;   // summonedTotal: summoned enemies created so far this level (part of the kill total)
   const ammo = {};                // rounds per AMMO_TYPES id; filled by resetLoadout()
   // ticks left of each timed power-up; `frozen` (can't walk, set by PROJECTILES freeze) is not a pickup but lives here so the
   // countdown, the HUD text and the reset on level start/retry come for free. freezeGrace = ticks of immunity to a new freeze.
@@ -1150,7 +1202,7 @@ export async function main(ns) {
   let difficulty = DEFAULT_DIFFICULTY;     // key of DIFFICULTIES, chosen on the title screen
   let hazardTimer = 0, mouseTurn = 0;      // ticks until nukage hurts again; mouse movement not yet applied to pa
   const heldKeys = new Set();     // ids from KEYS
-  let gameOver = false, won = false, showMap = false;
+  let gameOver = false, won = false, showMap = false, showHistory = false;   // showHistory: the end screen is showing the full run history (H)
   let flashMsg = '', flashTimer = 0, flashStyle = '';
   let shootCooldown = 0, useCooldown = 0, prevUseKey = false;
   let muzzleFlash = 0;    // yellow muzzle flash frames
@@ -1172,8 +1224,8 @@ export async function main(ns) {
   //           attackTimer counts ticks of attack animation left; isAttacking is true while it is above 0.
   //          memX/memY/memTicks: where it last saw or heard the player and for how long it will keep going there;
   //          pain: ticks of flinching left; side: +1/-1, which way it sidesteps when blocked.
-  //          spawned: true for enemies created by a spawner attack (see trySpawn); they are NOT part of the map's
-  //          kill total and are removed from this array once their death animation ends. kids: the enemies this
+  //          spawned: true for enemies created by a spawner attack (see trySpawn); they count as kills and points
+  //          (summonedTotal adds them to the kill total) and are removed from this array once their death animation ends. kids: the enemies this
   //          one has spawned (used to enforce maxAlive).
   const pickups = [];   // filled by startLevel()
   //   decor   { type (key of DECORATIONS), x, y, solid, r }  static scenery; never changes during a level (see DECORATIONS).
@@ -1496,11 +1548,11 @@ export async function main(ns) {
 
   function collectPickup(def) {
     const g = def.give;
-    if (g.health) health = Math.min(STAT_MAX.health, health + g.health);
-    if (g.armor) armor = Math.min(STAT_MAX.armor, armor + g.armor);
+    if (g.health) health = Math.min(Math.max(STAT_MAX.health, health), health + g.health);   // (health above the cap from the roguelike bonus is kept)
+    if (g.armor) armor = Math.min(Math.max(STAT_MAX.armor, armor), armor + g.armor);
     if (g.ammo) {
       const scale = DIFFICULTIES[difficulty].ammoPickup;
-      for (const [type, n] of Object.entries(g.ammo)) ammo[type] = Math.min(AMMO_TYPES[type].max, ammo[type] + Math.round(n * scale));
+      for (const [type, n] of Object.entries(g.ammo)) ammo[type] = Math.min(Math.max(AMMO_TYPES[type].max, ammo[type]), ammo[type] + Math.round(n * scale));   // (ammo above the cap from the roguelike bonus is kept)
     }
     if (g.key) heldKeys.add(g.key);
     if (def.power) powers[def.power] = TUNING.powerTicks[def.power];
@@ -1551,6 +1603,7 @@ export async function main(ns) {
     if (health <= 0) {
       gameOver = true;
       endTime = Date.now();
+      recordRun('DIED'); deaths++; saveProgress();   // the next run starts stronger (see PROGRESSION)
       flash('YOU DIED', 9999);
       play(SOUNDS.death, 1.0);
     }
@@ -2026,6 +2079,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     if (kind === TILE.SECRET) {
       if (blocked[idx]) {
         blocked[idx] = 0;
+        wakeBeyondDoor(mx, my);   // a secret room counts as a room behind a door
         secretsFound++;
         flash('SECRET FOUND!', 40, 'secret');
         play(SOUNDS.door, 0.8);
@@ -2093,6 +2147,12 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   // hands the corpse over to the death animation handling in updateGame().
   function hitEnemy(e, damage, hx, hy, impact = true) {
     const def = e.def;
+    if (def.invulnerable && e.kidKills < def.invulnerable.kills) {   // shielded until enough of its summons are dead
+      flash(`SHIELDED: KILL ${def.invulnerable.kills - e.kidKills} MORE OF ITS SUMMONS`, 20);
+      e.memX = px; e.memY = py; e.memTicks = TUNING.alertMemoryTicks;
+      if (impact) effects.push({ x: hx, y: hy, ttl: 6, sprite: false, anim: 'impact', blob: HIT_BLOB });
+      return;
+    }
     if (powers.berserk > 0) damage *= TUNING.berserkMultiplier;
     e.hp -= damage;
     e.memX = px; e.memY = py; e.memTicks = TUNING.alertMemoryTicks;   // being shot tells it where you are
@@ -2104,10 +2164,15 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     } else {
       e.alive = false;   // stops the AI
       e.deathFrame = 0;  // starts the death animation
-      if (!e.spawned && !def.prop) {   // summoned enemies and barrels give no kills or points (kill total stays fixed)
+      if (!def.prop) {                 // every enemy, map-placed or summoned: a kill and points
         kills++;
         score += def.points;
-        flash(def.killMsg, 30, def.boss ? 'boss' : '');
+        if (!e.spawned) flash(def.killMsg, 30, def.boss ? 'boss' : '');   // (no message for summoned ones: there are too many)
+      }
+      if (e.parent) {                  // counts toward its summoner's shield
+        const pr = e.parent, need = pr.def.invulnerable?.kills;
+        pr.kidKills++;
+        if (need && pr.alive && pr.kidKills === need) flash('SHIELD DOWN!', 40, 'boss');
       }
       if (def.sounds.death) playAt(def.sounds.death, e.x, e.y, 1.0);
     }
@@ -2828,13 +2893,35 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   // ─── DEATH / WIN SCREENS ────────────────────────────────────────────────────
   // Shown once (endDrawn guards it) after gameOver or won. The clock uses endTime so it is frozen at the moment the
   // game ended. The level name comes from LEVELS. After this the loop waits for Enter (startLevel) or ESC.
+  // The run history as screen rows [text, colour]. Compact (maxRows last runs, under the end screen) or full (the H view, with the start
+  // loadout). Bars show score relative to the best of the rows shown; * marks the best score of all (cheat runs are marked and never count
+  // as best); the newest row is this run.
+  const fmtTime = t => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+  function historyLines(maxRows, full = false) {
+    const clean = runs.filter(x => !x.ch), wins = clean.filter(x => x.r === 'WON');
+    const best = Math.max(0, ...clean.map(x => x.sc)), fastest = wins.length ? Math.min(...wins.map(x => x.t)) : null;
+    const out = [[`RUNS ${runs.length}   WON ${runs.filter(x => x.r === 'WON').length}   BEST SCORE ${best}${fastest != null ? '   FASTEST WIN ' + fmtTime(fastest) : ''}`, '#8cf']];
+    if (full) out.push(['RUN  RESULT   TIME  KILLS  SCORE   START HP/GUNS', '#888']);
+    const shown = runs.slice(-maxRows), top = Math.max(1, ...shown.map(x => x.sc));
+    shown.forEach((x, i) => {
+      const bar = '█'.repeat(Math.max(1, Math.round(x.sc / top * (full ? 14 : 12))));
+      const mark = !x.ch && best > 0 && x.sc === best ? '*' : ' ';
+      const row = `#${String(x.n).padEnd(3)} ${x.r === 'WON' ? 'WON ' : 'DIED'}  ${fmtTime(x.t)}  ${String(x.k).padStart(3)}/${String(x.kt).padEnd(3)} ${String(x.sc).padStart(6)}${mark}`
+        + (full ? ` ${String(x.hp ?? '').padStart(4)}/${String(x.w ?? '').padEnd(2)}  ` : ' ') + bar + (x.ch ? ' (cheats)' : '') + (i === shown.length - 1 && !full ? '  < this run' : '');
+      out.push([row, x.r === 'WON' ? '#6c6' : '#a66']);
+    });
+    const width = Math.max(...out.slice(1).map(l => l[0].length));   // pad the rows to one width so centring keeps the columns lined up
+    for (let i = 1; i < out.length; i++) out[i][0] = out[i][0].padEnd(width);
+    return out;
+  }
   function renderEndScreen(victory) {
     const elapsed = Math.floor(((endTime || Date.now()) - gameStartTime) / 1000);
     const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
     const ss = String(elapsed % 60).padStart(2, '0');
     flatCanvas.style.display = 'none';
+    spriteOverlay.textContent = '';   // the last frame's PNG sprites would otherwise stay on top of the end screen
     pre.innerHTML = '';
-    const lines = victory ? [
+    const lines = showHistory ? [['', null], ['RUN HISTORY  (H: BACK)', '#ff0'], ['', null], ...historyLines(16, true), ['', null], ['  ENTER: CONTINUE   ESC: EXIT', '#555']] : victory ? [
       ['', null],
       ['  ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★  ', '#ff0'],
       ['', null],
@@ -2849,7 +2936,9 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       ['', null],
       ['  ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★  ', '#ff0'],
       ['', null],
-      [levelIndex + 1 < LEVELS.length ? '    ENTER: NEXT LEVEL   ESC: EXIT' : '  ENTER: PLAY AGAIN   ESC: EXIT', '#555'],
+      ...historyLines(4),
+      ['', null],
+      [levelIndex + 1 < LEVELS.length ? '    ENTER: NEXT LEVEL   H: HISTORY   ESC: EXIT' : '  ENTER: PLAY AGAIN   H: HISTORY   ESC: EXIT', '#555'],
     ] : [
       ['', null],
       ['  ██████████████████████████████  ', '#600'],
@@ -2861,9 +2950,13 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       [`  Secrets: ${secretsFound} / ${secretsTotal}                `, '#666'],
       [`  Score:   ${score}                `, '#666'],
       ['', null],
+      [`  Next run: ${deaths <= PROGRESSION.weapons.length && WEAPONS[PROGRESSION.weapons[deaths - 1]] ? '+' + WEAPONS[PROGRESSION.weapons[deaths - 1]].name + '  ' : ''}+${PROGRESSION.healthPerDeath} HEALTH  +AMMO  `, '#a44'],
+      ['', null],
       ['  ██████████████████████████████  ', '#600'],
       ['', null],
-      ['    ENTER: TRY AGAIN   ESC: EXIT', '#555'],
+      ...historyLines(4),
+      ['', null],
+      ['    ENTER: TRY AGAIN   H: HISTORY   ESC: EXIT', '#555'],
     ];
     for (const [text, color] of lines) {
       if (!text) { pre.appendChild(doc.createTextNode('\n')); continue; }
@@ -2956,8 +3049,8 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   // They open plain doors, avoid walking into each other and sidestep when blocked. An enemy beyond `roam` stops
   // moving for good. Dead enemies are skipped by the AI; their death animation is advanced separately in updateGame().
   // SPAWNERS: an attack of kind 'spawn' (Pain Elemental: Lost Souls, Arch-vile: any enemy) summons enemies instead of
-  // hurting you (trySpawn). They are limited per spawner (maxAlive) and overall (TUNING.maxEnemies), count for no kills
-  // or points, and are deleted from `enemies` shortly after they die, so never keep an index into that array.
+  // hurting you (trySpawn). They are limited per spawner (maxAlive) and overall (TUNING.maxEnemies), count as kills and points like any
+  // other enemy, and are deleted from `enemies` shortly after they die, so never keep an index into that array.
   // Move an enemy a step in direction (dx, dy) (dist = its length), sliding along walls. Does not walk into other
   // living enemies it would get closer to. If completely blocked it opens an unlocked door in front of it, then
   // tries to sidestep (e.side picks the direction and flips whenever the sidestep is blocked too).
@@ -3141,13 +3234,15 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     const ptx = Math.floor(px), pty = Math.floor(py);
     const seen = new Set([my * MW + mx, pty * MW + ptx]);
     const queue = [];
+    const doorDist = Math.hypot(mx + 0.5 - px, my + 0.5 - py);
     for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const tx = mx + ox, ty = my + oy;
       if (tx < 0 || ty < 0 || tx >= MW || ty >= MH || seen.has(ty * MW + tx) || blocked[ty * MW + tx]) continue;
+      if (Math.hypot(tx + 0.5 - px, ty + 0.5 - py) < doorDist) continue;   // the player's own side of the door is not "behind" it
       seen.add(ty * MW + tx);
       queue.push(ty * MW + tx);
     }
-    for (let q = 0; q < queue.length && q < 3000; q++) {
+    for (let q = 0; q < queue.length && q < 20000; q++) {
       const idx = queue[q], x = idx % MW, y = (idx - x) / MW;
       for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const tx = x + ox, ty = y + oy, n = ty * MW + tx;
@@ -3158,6 +3253,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     }
     for (const e of enemies) {
       if (!e.alive || !e.def.wakeOnDoor || !seen.has(Math.floor(e.y) * MW + Math.floor(e.x))) continue;
+      if (e.def.summoner) { e.active = true; continue; }   // a summoner starts summoning and wandering (see updateEnemy)
       e.memX = px; e.memY = py; e.memTicks = TUNING.alertMemoryTicks * 2;   // generous: it may have a long way to run
     }
   }
@@ -3207,11 +3303,11 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       alive: true, deathFrame: -1, isAttacking: false, attackTimer: 0,
       memX: 0, memY: 0, memTicks: 0, pain: 0, side: Math.random() < 0.5 ? 1 : -1,
       path: null, pathI: 0, pathGoal: -1, pathAge: 99, stuck: 0, lastX: x, lastY: y,
-      spawned: false, kids: [],
+      spawned: false, kids: [], parent: null, kidKills: 0, active: false, hunt: false, wanderAng: 0, wanderTicks: 0,
     };
   }
-  // The kill total shown on the end screen: only enemies that were placed in the map (summoned ones and barrels don't count).
-  const countLevelEnemies = () => enemies.reduce((n, e) => n + (e.spawned || e.def.prop ? 0 : 1), 0);
+  // The kill total shown on the end screen: enemies placed in the map plus every enemy summoned so far (barrels don't count).
+  const countLevelEnemies = () => summonedTotal + enemies.reduce((n, e) => n + (e.spawned || e.def.prop ? 0 : 1), 0);
 
   // SPAWNER ATTACKS (kind 'spawn'). Picks an enemy type from atk.spawn: one id, a list of ids, or 'any' (every type
   // not marked spawnable:false), weighted by ENEMIES[id].spawnWeight.
@@ -3269,7 +3365,8 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       if (p.parent.alive && spawnSpotFree(p.x, p.y, r, p.parent)) {
         const m = makeEnemy(p.type, p.x, p.y);
         m.spawned = true; m.memX = px; m.memY = py; m.memTicks = TUNING.alertMemoryTicks;
-        enemies.push(m); p.parent.kids.push(m);
+        m.parent = p.parent; m.hunt = !!p.parent.def.summoner;   // a summoner's spawn hunts you for good
+        enemies.push(m); p.parent.kids.push(m); summonedTotal++;
         playAt(SOUNDS.spawn, p.x, p.y, 1.0);   // the enemy teleports in
         effects.push({ x: p.x, y: p.y, ttl: 8, sprite: false, anim: 'impact', blob: { tag: '\x19', chars: '*+.', size: 0.9 } });
       }
@@ -3327,12 +3424,9 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     }
   }
   // onDeath.spawn: something climbs out of the wreck (one random type from sp.types), awake and hunting. It tries a few
-  // spots around the wreck and falls back to the wreck's own tile. Skipped when TUNING.maxEnemies summoned enemies are alive. Flagged
-  // `spawned` like summoned enemies (no kill, no points, no corpse left behind).
+  // spots around the wreck and falls back to the wreck's own tile. No cap (a tank only ever makes one). Flagged
+  // `spawned` like summoned enemies (points but no kill, no corpse left behind); it hunts you if its tank did.
   function deathSpawn(e, sp) {
-    let alive = 0;
-    for (const o of enemies) if (o.alive && o.spawned) alive++;   // only SUMMONED enemies count; a populated level has hundreds of map enemies, which used to block every summon
-    if (alive + pendingSpawns.length >= TUNING.maxEnemies) return;
     const type = sp.types[Math.floor(Math.random() * sp.types.length)], r = ENEMIES[type].radius;
     let x = e.x, y = e.y;
     for (let tries = 0; tries < 8; tries++) {
@@ -3340,8 +3434,8 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       if (!solidAt(tx + r, ty) && !solidAt(tx - r, ty) && !solidAt(tx, ty + r) && !solidAt(tx, ty - r) && hasLineOfSight(e.x, e.y, tx, ty)) { x = tx; y = ty; break; }
     }
     const m = makeEnemy(type, x, y);
-    m.spawned = true; m.memX = px; m.memY = py; m.memTicks = TUNING.alertMemoryTicks;
-    enemies.push(m);
+    m.spawned = true; m.memX = px; m.memY = py; m.memTicks = TUNING.alertMemoryTicks; m.hunt = e.hunt;
+    enemies.push(m); summonedTotal++;
     effects.push({ x, y, ttl: 8, sprite: false, anim: 'impact', blob: { tag: '\x19', chars: '*+.', size: 0.9 } });
   }
 
@@ -3387,7 +3481,8 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     // See / remember: whenever it can see the player it records where; when it can't (behind a corner, or it only
     // heard a shot) it keeps walking to the last recorded spot until memTicks runs out or it gets there.
     const sees = dist < def.sight && los();
-    if (sees) { e.memX = px; e.memY = py; e.memTicks = TUNING.alertMemoryTicks; }
+    if (sees) { e.memX = px; e.memY = py; e.memTicks = TUNING.alertMemoryTicks; if (def.summoner) e.active = true; }
+    const roaming = def.summoner && e.active;   // an active summoner never goes after you: it wanders and summons (and flees when you are close)
     const spd = typeof def.speed === 'function' ? def.speed(e) : def.speed;
     const spawnDist = Math.hypot(e.x - e.spawnX, e.y - e.spawnY);
     if (spd > 0 && spawnDist < def.roam) {
@@ -3403,25 +3498,42 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
             if (e.x === ox && e.y === oy) moveEnemy(e, dy * s1, -dx * s1, dist, fs);
           }
         } else if (dist > def.stopDistance) moveEnemy(e, dx, dy, dist, spd);   // else: already in biting range, hold and attack
+      } else if (roaming) {
+        wanderSummoner(e, def, spd);
       } else if (e.memTicks > 0) {
         // Cannot see the player: go to the remembered spot along a found route (straight line only if no route is
-        // known). A `relentless` enemy instead keeps tracking where the player is NOW until its memory runs out.
-        const tx = def.relentless ? px : e.memX, ty = def.relentless ? py : e.memY;
+        // known). A `relentless` enemy (or a summoner's spawn, e.hunt) instead keeps tracking where the player is NOW,
+        // and a hunter never forgets (memTicks does not run down).
+        const track = def.relentless || e.hunt;
+        const tx = track ? px : e.memX, ty = track ? py : e.memY;
         const mdx = tx - e.x, mdy = ty - e.y, md = Math.hypot(mdx, mdy);
-        e.memTicks--;
-        if (md < 0.6 && !def.relentless) e.memTicks = 0;
+        if (!e.hunt) e.memTicks--;
+        if (md < 0.6 && !track) e.memTicks = 0;
         else if (!followPath(e, tx, ty, spd)) moveEnemy(e, mdx, mdy, md, spd);
       }
-    }
+    } else if (roaming && spd > 0) wanderSummoner(e, def, spd);   // strayed past its roam limit (fleeing): wander homes it back
 
     // Attacks: each one rolls independently every tick (difficulty scales the chance)
     const aggression = DIFFICULTIES[difficulty].enemyChance;
     for (const atk of def.attacks) {
+      const anywhere = roaming && atk.kind === 'spawn';   // an active summoner summons whether or not you are near or in view
       const maxRange = atk.kind === 'ranged' && TUNING.rangedReachView ? Math.max(atk.range[1], VIEW_DIST) : atk.range[1];   // ranged: anywhere in view
-      if (dist < atk.range[0] || dist >= maxRange) continue;
-      if (Math.random() >= atk.chance * aggression || !los()) continue;
+      if (!anywhere && (dist < atk.range[0] || dist >= maxRange)) continue;
+      if (Math.random() >= atk.chance * aggression || (!anywhere && !los())) continue;
       enemyAttack(e, atk);
     }
+  }
+  // An active summoner's idle movement: walk in a random direction for a second or two, pick another when something is in the
+  // way, and head back toward where it started once it gets far from it (def.roam * 0.8).
+  function wanderSummoner(e, def, spd) {
+    const ws = def.wanderSpeed ?? spd;
+    const hx = e.spawnX - e.x, hy = e.spawnY - e.y;
+    if (Math.hypot(hx, hy) > def.roam * 0.8) { e.wanderAng = Math.atan2(hy, hx); e.wanderTicks = 15; }
+    else if (!(e.wanderTicks > 0)) { e.wanderAng = Math.random() * TAU; e.wanderTicks = 30 + Math.floor(Math.random() * 60); }
+    e.wanderTicks--;
+    const ox = e.x, oy = e.y;
+    moveEnemy(e, Math.cos(e.wanderAng), Math.sin(e.wanderAng), 1, ws);
+    if (e.x === ox && e.y === oy) e.wanderTicks = 0;   // blocked: choose another heading next tick
   }
 
   // One simulation tick. Every speed, cooldown and probability in the game is tuned per tick, so the
@@ -3555,6 +3667,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     // ── Exit check ───────────────────────────────────────────────────────
     if (tileAt(px, py) === TILE.EXIT) {
       won = true; endTime = Date.now(); score += 1000;
+      recordRun('WON');   // winning does not reset anything: the history and the death-based bonuses carry on
       flash(`${LEVELS[levelIndex].name.split(':')[0]} COMPLETE! +1000`, 9999);
       updateHud();
     }
@@ -3613,22 +3726,25 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   //   'retry'  restore the loadout the current level started with (levelStart)
   // It parses the map, then resets everything that belongs to a single level. If you add per-level state
   // anywhere in this file, reset it here, or it will leak from one level into the next.
+  // The loadout a run starts with: START plus the roguelike bonuses for `deaths` (see PROGRESSION). The newest unlocked weapon is
+  // selected, and every ammo type a weapon you own uses starts with its base amount plus the per-death growth.
   function resetLoadout() {
-    health = START.health; armor = START.armor;
-    for (const t in AMMO_TYPES) ammo[t] = ALL_WEAPONS ? AMMO_TYPES[t].max : AMMO_TYPES[t].start;
+    const unlocked = PROGRESSION.weapons.slice(0, deaths).filter(id => WEAPONS[id]);
+    const ids = ALL_WEAPONS ? Object.keys(WEAPONS) : [...START.weapons, ...unlocked];
+    health = START.health + deaths * PROGRESSION.healthPerDeath; armor = START.armor;
+    for (const t in AMMO_TYPES) {
+      const uses = ids.some(id => WEAPONS[id].ammoType === t), base = AMMO_TYPES[t].start;
+      ammo[t] = ALL_WEAPONS ? AMMO_TYPES[t].max
+        : uses ? base + (base ? 0 : PROGRESSION.weaponAmmo[t] ?? 0) + deaths * (PROGRESSION.ammoPerDeath[t] ?? 0) : base;
+    }
     owned.clear();
-    for (const id of (ALL_WEAPONS ? Object.keys(WEAPONS) : START.weapons)) owned.add(id);
-    currentWeapon = [...owned][0] ?? Object.keys(WEAPONS)[0];
+    for (const id of ids) owned.add(id);
+    currentWeapon = (!ALL_WEAPONS && unlocked.length ? unlocked[unlocked.length - 1] : [...owned][0]) ?? Object.keys(WEAPONS)[0];
   }
 
   function startLevel(index, mode) {
     if (mode === 'fresh') { resetLoadout(); score = 0; }
-    else if (mode === 'retry' && levelStart) {
-      health = levelStart.health; armor = levelStart.armor; score = levelStart.score;
-      Object.assign(ammo, levelStart.ammo);
-      owned.clear(); levelStart.owned.forEach(id => owned.add(id));
-      currentWeapon = levelStart.currentWeapon;
-    }
+    else if (mode === 'retry') { resetLoadout(); score = levelStart?.score ?? 0; }   // a new run: the roguelike loadout for the deaths so far
     levelIndex = index;
     parseMap(index);
     automapOpen = false;
@@ -3637,10 +3753,10 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     px = spawns.player.x; py = spawns.player.y; pa = -Math.PI / 2;
     heldKeys.clear();
     for (const k in powers) powers[k] = 0;
-    kills = 0; secretsFound = 0;
+    kills = 0; summonedTotal = 0; secretsFound = 0;
     shootCooldown = 0; useCooldown = 0; muzzleFlash = 0; afterglow = 0; faceHitTimer = 0; hazardTimer = 0; mouseTurn = 0; freezeGrace = 0;
     flashMsg = ''; flashTimer = 0; flashStyle = '';
-    gameOver = false; won = false; endDrawn = false; endTime = 0; gameStartTime = Date.now();
+    gameOver = false; won = false; showHistory = false; endDrawn = false; endTime = 0; gameStartTime = Date.now();
     damageNumbers = [];
     projectiles.length = 0; effects.length = 0; pendingSpawns.length = 0;
     frameWallTile.fill(TILE.WALL); frameWallIdx.fill(0);
@@ -3654,7 +3770,8 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     for (const d of spawns.decor) decor.push({ ...d, solid: !!DECORATIONS[d.type].solid, r: DECORATIONS[d.type].radius ?? 0.3, phase: Math.floor(d.x * 131 + d.y * 313) * 97 % 1000 });
 
     faceEl.textContent = FACES.normal;
-    flash(LEVELS[index].name, 40);
+    const newWeapon = mode !== 'next' && !ALL_WEAPONS && deaths > 0 ? WEAPONS[PROGRESSION.weapons[deaths - 1]]?.name : '';
+    flash(deaths > 0 ? `${LEVELS[index].name}  -  RUN ${deaths + 1}${newWeapon ? '  -  NEW: ' + newWeapon : ''}` : LEVELS[index].name, deaths > 0 ? 70 : 40);
     updateHud();
   }
   // FRAME LOOP. Each iteration: add the real time since the last iteration to an accumulator (capped at
@@ -3669,7 +3786,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   try {
     startLevel(0, 'fresh');
     inGame = true;
-    let last = Date.now(), acc = 0, prevEnter = false;
+    let last = Date.now(), acc = 0, prevEnter = false, prevH = false;
     while (running) {
       const frameStart = Date.now();
       acc = Math.min(acc + (frameStart - last), STEP_MS * MAX_STEPS_PER_FRAME);
@@ -3689,6 +3806,9 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
         // End screen: draw once (the clock is frozen at endTime), then wait for Enter
         if (!endDrawn) { renderEndScreen(won); endDrawn = true; prevEnter = !!keys['Enter']; }
         acc = 0;
+        const hKey = !!keys['h'];
+        if (hKey && !prevH) { showHistory = !showHistory; endDrawn = false; }   // H toggles the full run history
+        prevH = hKey;
         const enter = !!keys['Enter'];
         if (enter && !prevEnter) {
           if (won) { if (levelIndex + 1 < LEVELS.length) startLevel(levelIndex + 1, 'next'); else startLevel(0, 'fresh'); }

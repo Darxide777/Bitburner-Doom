@@ -33,6 +33,7 @@ Settings are flags you add when you start the script, for example `run doom.js -
 | `--infiniteammo` | weapons never run out of ammo |
 | `--allweapons` | start with every weapon and full ammo |
 | `--noautoswitch` | don't switch weapon automatically when the current one runs dry |
+| `--reset` | forget your deaths and run history: the roguelike bonuses (extra weapons, health, ammo) start again from zero |
 | `--help` | print the list and quit |
 
 Flags can be combined in any order. An unknown flag is reported and ignored. A web-page converter has to provide `ns.flags`;
@@ -75,11 +76,26 @@ marked, so a big level stays readable. Enemies are never shown. `D` is a door, `
 You start in the south-east in a safe room with the three arcade cabinets (no enemies, some supplies). The route to the exit in
 the far west goes: first hall (blue key) -> blue door -> a small room -> a cave -> the big northern caves. The red key is in the room
 on the north-east side, the yellow key in the room west of the middle, and the exit room is behind the red door and then the
-yellow door. The exit room is held by two Arch-viles and two Pain Elementals. Every enemy type, every pickup, every weapon,
-every decoration and every tile type appears at least once. A dead-end corridor off the east side of the second cave
-leads to a secret wall (press F on it); behind it is a hidden room with the BFG 9000. Two nukage pools sit in the first
+yellow door. **The level is a roguelike:** the map holds no ordinary enemies, only exploding barrels and one Arch-vile asleep in every
+room (15 of them, each as far from the room's doors as it can be; the start room has none). What you fight is whatever they summon.
+Every decoration and tile type appears at least once. A dead-end corridor off the east side of the second cave
+leads to a secret wall (press F on it); behind it is a hidden room (its reward is armor). Two nukage pools sit in the first
 hall and the big cave (a radiation suit lies near the first). Two rooms use the brick (`%`) and tech (`&`) wall looks.
-Health, armor and ammo are plentiful, with more near the exit. About 230 enemies in all, so expect long fights.
+There are no health, ammo or weapon pickups on the map any more (see "Roguelike progression" below); keycards, armor and the power-ups are still
+lying around.
+
+## Roguelike progression
+
+Every time you die and start over, the next run begins stronger: **one more weapon** (shotgun, chaingun, rocket launcher, plasma rifle,
+chainsaw, then the BFG 9000; after that no more are granted), **+10 health** and **more ammo** of every type your weapons use, with no limit on
+health or ammo. The newest weapon is selected. The end screen shows what you get next. Winning does not reset anything: the extra weapons, health and ammo carry on, and you can keep playing.
+
+**Run history.** Every run, whether you die or reach the exit, is recorded (result, time, kills, score, and the health and weapons you started with)
+and the end screen shows your last four runs as bars with the best score starred, plus totals and your fastest win. Press `H` on the end screen for
+the full history (the last 16 runs, side by side). Runs played with cheat flags are marked `(cheats)` and never count as a best. The last 200 runs are kept.
+Everything is saved in `doom_progress.txt` (plain JSON text) so it survives closing the script; the web page version keeps it only while the page is open.
+`run doom.js --reset` wipes it all, deaths and history. The numbers are in `PROGRESSION`
+near the top of `doom.js`. The pickups still work if you want them: `a n o p` (ammo), `h` (health) and `2`-`7` (weapons) in `map.txt` as before.
 
 ## Map files
 
@@ -122,9 +138,9 @@ ignored.
 | `Y` | Cyberdemon | boss, rockets |
 | `M` | Spider Mastermind | boss, chaingun (a stream of single bullets) |
 | `L` | Pain Elemental | spawner: summons Lost Souls (a fire spike warns where each one will appear) |
-| `V` | Arch-vile | spawner: summons a random enemy from anywhere in the game (same fire-spike warning) |
+| `V` | Arch-vile | spawner: summons a random enemy from anywhere in the game (same fire-spike warning). Asleep until you open a door into its room (or see it); from then on it summons non-stop and wanders its room, even when you are far away, and what it summons hunts you for good. **Invulnerable until 20 of its own summons are dead** (a message shows how many are left). |
 
-Summoned enemies give no kills or points, and a spawner never has more than a few alive at once.
+Summoned enemies count like any other: their points go into your score and they add to your kills (and to the kill total on the end screen). A spawner never has more than a few alive at once (`maxAlive` per spawner: 4 for the Arch-vile, 8 for the Pain Elemental), and `TUNING.maxEnemies` (40) caps all summoned enemies alive together. Enemies that climb out of a destroyed tank are not capped. To put an ordinary enemy on the map, just use its letter in `map.txt` as before.
 
 **Scenery**
 
@@ -202,6 +218,7 @@ just a new table entry. Each table has a comment explaining its fields.
    Arch-vile entries). The enemy does not appear at once: a fire-spike warning (`Spawn_Warning_idle1`, `_idle2`, shared by every
    spawner) shows at the spot for `TUNING.spawnWarningTicks` (default 14, about half a second) first; ASCII sparks are used
    without that art. If the summoner dies during the warning, nothing appears.
+   A spawner can also be a `summoner` (once it is active it summons without needing line of sight or range and wanders about, `wanderSpeed`) and `invulnerable: { kills }` (no damage until that many of its own summons are dead); `wakeOnDoor` makes opening a door into its room activate it. See the legend above `ENEMIES` in `doom.js`.
    Spawners also have `flee: { dist, ticks, speed }`: they run away (at `speed` tiles per tick, much faster than their normal walk) from a player they can see when closer than `dist` tiles, and for
    `ticks` ticks after every summon, so they can't just be shot while standing still. (They also have much more health.)
 7. Scenery you can shoot (like the barrel) is an `ENEMIES` entry with `prop: true` and an `onDeath.explode` block
