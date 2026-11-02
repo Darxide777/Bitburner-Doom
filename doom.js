@@ -199,24 +199,25 @@ const SOUND_FALLBACKS = {
 // Starting stats and the most you can carry of each
 // Ammo is kept per TYPE (AMMO_TYPES); each weapon names the type it uses in `ammoType`. STAT_MAX caps health and
 // armor; ammo caps are in AMMO_TYPES. Nothing else enforces these caps.
-const START = { health: 100, armor: 0, weapons: ['pistol'] };   // weapons you begin with; starting ammo is AMMO_TYPES[].start
+const START = { health: 100, armor: 0, weapons: ['chainsaw'] };   // weapons you begin with: only the chainsaw (it needs no ammo); the pistol is the first unlock (see PROGRESSION). Starting ammo is AMMO_TYPES[].start
 // ROGUELIKE PROGRESSION. Every time you die and start over you begin the next run a little stronger. `deaths` (how many times
 // you have died; saved in PROGRESS_FILE so it survives closing the script; run with --reset to wipe it) decides the starting loadout:
 //   weapons        one more weapon per death, in this order, until you have them all (then no more are granted)
 //   healthPerDeath extra starting health per death, with no limit (the 100 cap only applies to health pickups)
-//   ammoPerDeath   extra starting ammo of each type per death, with no limit
-//   weaponAmmo     starting ammo of a type whose weapon you have unlocked, on top of the per-death growth (shells, rockets and cells
+//   ammoPerDeath   extra starting ammo of each type for every death AFTER the weapon that uses it was unlocked (so a new weapon starts with
+//                  its base amount, e.g. the pistol's 100 bullets, and grows from there), with no limit
+//   weaponAmmo     starting ammo of a type whose weapon you have unlocked, the amount a new weapon arrives with, before the per-death growth (shells, rockets and cells
 //                  start at 0 otherwise, so a new weapon would be useless)
 const PROGRESSION = {
-  weapons: ['shotgun', 'chaingun', 'rocketlauncher', 'plasmarifle', 'chainsaw', 'bfg9000'],
+  weapons: ['pistol', 'shotgun', 'chaingun', 'rocketlauncher', 'plasmarifle', 'bfg9000'],   // (the chainsaw is in START.weapons)
   healthPerDeath: 10,
-  ammoPerDeath: { bullets: 10, shells: 4, rockets: 2, cells: 10 },
+  ammoPerDeath: { bullets: 25, shells: 4, rockets: 2, cells: 10 },
   weaponAmmo: { shells: 8, rockets: 4, cells: 40 },
 };
 const PROGRESS_FILE = 'doom_progress.txt';
 // Ammo types. start/max are in rounds. A weapon uses one of these ids as its ammoType (null = no ammo needed).
 const AMMO_TYPES = {
-  bullets: { name: 'BULLETS', start: 50, max: 200 },
+  bullets: { name: 'BULLETS', start: 100, max: 200 },
   shells: { name: 'SHELLS', start: 0, max: 50 },
   rockets: { name: 'ROCKETS', start: 0, max: 50 },
   cells: { name: 'CELLS', start: 0, max: 300 },
@@ -944,7 +945,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '89';
+  const VERSION = '91';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -3756,10 +3757,13 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     const unlocked = PROGRESSION.weapons.slice(0, deaths).filter(id => WEAPONS[id]);
     const ids = ALL_WEAPONS ? Object.keys(WEAPONS) : [...START.weapons, ...unlocked];
     health = START.health + deaths * PROGRESSION.healthPerDeath; armor = START.armor;
+    // the death count at which a weapon became yours (0 = from the start): ammo grows only for the deaths after its type's first weapon
+    const unlockedAt = id => START.weapons.includes(id) ? 0 : PROGRESSION.weapons.filter(w => WEAPONS[w]).indexOf(id) + 1;
     for (const t in AMMO_TYPES) {
-      const uses = ids.some(id => WEAPONS[id].ammoType === t), base = AMMO_TYPES[t].start;
+      const users = ids.filter(id => WEAPONS[id].ammoType === t), base = AMMO_TYPES[t].start;
+      const since = users.length ? Math.min(...users.map(unlockedAt)) : 0;
       ammo[t] = ALL_WEAPONS ? AMMO_TYPES[t].max
-        : uses ? base + (base ? 0 : PROGRESSION.weaponAmmo[t] ?? 0) + deaths * (PROGRESSION.ammoPerDeath[t] ?? 0) : base;
+        : users.length ? base + (base ? 0 : PROGRESSION.weaponAmmo[t] ?? 0) + Math.max(0, deaths - since) * (PROGRESSION.ammoPerDeath[t] ?? 0) : base;
     }
     owned.clear();
     for (const id of ids) owned.add(id);

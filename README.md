@@ -86,8 +86,8 @@ lying around.
 
 ## Roguelike progression
 
-Every time you die and start over, the next run begins stronger: **one more weapon** (shotgun, chaingun, rocket launcher, plasma rifle,
-chainsaw, then the BFG 9000; after that no more are granted), **+10 health** and **more ammo** of every type your weapons use, with no limit on
+Every time you die and start over, the next run begins stronger: **one more weapon** (you start with only the chainsaw; then the pistol, shotgun, chaingun,
+rocket launcher, plasma rifle and finally the BFG 9000, after which no more are granted), **+10 health** and **more ammo** (the pistol arrives with 100 bullets and gains 25 more per death after that; each other ammo type works the same way from the death its first weapon is unlocked) of every type your weapons use, with no limit on
 health or ammo. The newest weapon is selected. The end screen shows what you get next. Winning does not reset anything: the extra weapons, health and ammo carry on, and you can keep playing.
 
 **Run history.** Every run, whether you die or reach the exit, is recorded (result, time, kills, score, and the health and weapons you started with)
