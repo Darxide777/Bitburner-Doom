@@ -34,7 +34,7 @@ Settings are flags you add when you start the script, for example `run doom.js -
 | `--allweapons` | start with every weapon and full ammo |
 | `--noautoswitch` | don't switch weapon automatically when the current one runs dry |
 | `--reset` | forget your points, store purchases, weapon unlocks, deaths and run history: start from zero |
-| `--bench` | unattended ARENA benchmark (see "Benchmark mode" below); `--benchsecs N` (seconds per round, default 60, at least 10), `--benchfrom N` (first round, default 20), `--benchstep N` (rounds added each time, default 10), `--benchmax N` (last round, default 150) |
+| `--bench` | unattended ARENA benchmark (see "Benchmark mode" below); `--benchsecs N` (seconds per round, default 60, at least 10), `--benchfrom N` (first round, default 20), `--benchstep N` (rounds added each time, default 10), `--benchmax N` (last round, default 250) |
 | `--help` | print the list and quit |
 
 Flags can be combined in any order. An unknown flag is reported and ignored. A web-page converter has to provide `ns.flags`;
@@ -64,7 +64,7 @@ On the title screen use **Left/Right** to pick the difficulty (easy, normal, har
 | Enter | After dying: retry the level. After winning: play the level again. On the title screen: start (Up/Down level, Left/Right difficulty) |
 | Esc | Quit (with the mouse captured, the first Esc only releases it) |
 
-Weapons: 1 Pistol, 2 Shotgun, 3 Chaingun, 4 Rocket Launcher, 5 Plasma Rifle, 6 BFG 9000, 7 Chainsaw. You start with
+Weapons: 1 Pistol, 2 Shotgun, 3 Chaingun, 4 Rocket Launcher, 5 Plasma Rifle, 6 BFG 9000, 7 Chainsaw. **The BFG clears the room:** when its ball goes off it kills every enemy it can see (up to 40 tiles), whatever their health, and cancels summons that were about to appear. Only the Arch-vile, Cyberdemon and Spider Mastermind survive it: they take 15 damage per blast if within 5 tiles of it (3 blasts for an Arch-vile, 2 for a Cyberdemon, 4 for a Spider Mastermind at their base health; an Arch-vile is still shielded until 20 of its summons are dead, which the BFG makes quick). See `clearRoom` on `bfgball` in `PROJECTILES`. You start with
 only the chainsaw; everything else is bought in the store (see below). Health, armor, ammo and weapons carry over to the next level. If you die you restart the level with
 the loadout your purchases give.
 
@@ -76,7 +76,7 @@ within 16 tiles of you (`AUTOMAP_ITEM_RADIUS`), weapons, armor and power-ups nev
 
 ## Choosing a level
 
-On the title screen, **Up/Down choose the level** and Left/Right the difficulty. There are three: **ROOMS** (square rooms, below), **ARENA** (one big room that gets harder every run, a benchmark) and **HANGAR** (E1M1, the Doom-style map in `map.txt`). Winning a level offers to play the same one again; the levels are separate maps, not an episode. Your points, purchases and unlocks are shared by all of them.
+On the title screen, **Up/Down choose the level** and Left/Right the difficulty. There are three: **ROOMS** (square rooms, below), **ARENA** (one big room that gets harder every time you clear it, also the benchmark) and **HANGAR** (E1M1, the Doom-style map in `map.txt`). Winning a level offers to play the same one again; the levels are separate maps, not an episode. Your points, purchases and unlocks are shared by all of them.
 
 ## ROOMS (the default level)
 
@@ -96,13 +96,13 @@ The other level is HANGAR (the second entry on the level select).
 ## ARENA (the benchmark level)
 
 `map_arena.txt`: a small start room with the store cabinet, a door, and **one square room** (30 x 30, the size of a ROOMS room). Nothing is placed in the map: when you start, the game
-scatters enemies over the big room: 16 at first plus 4 for every round, drawn from the zombies, sergeants, imps, demons, cacodemons, lost souls, barons, the three tanks and the cryobus,
-plus Pain Elementals (1, then +1 every two rounds) and Arch-viles (from round 3, +1 every three rounds), which keep summoning more. **Clear the room (every enemy dead, summons and the tanks' zombies included) to win.**
+scatters enemies over the big room: 16 at first plus 3 for every round, drawn from the zombies, sergeants, imps, demons, cacodemons, lost souls, barons, the three tanks and the cryobus,
+plus Pain Elementals (1, then +1 every two rounds) and Arch-viles (from round 5, +1 every four rounds), which keep summoning more. **Clear the room (every enemy dead, summons and the tanks' zombies included) to win.**
 
-**Every death AND every clear makes the next run harder** (the round is saved in `doom_progress.txt`; `--reset` zeroes it). Per round, all enemies get: **+15% hit points, +10% damage to you,
-+10% attack rate** (this also makes summoners summon more often), **+5% shot speed** (up to 3x), **+5% walking speed** (up to 2.5x) and **+15% summoning**: how many enemies a summoner may have alive,
+**Every clear makes the next round harder; dying does not** (you retry the same round, with whatever your points have bought; the round is saved in `doom_progress.txt`; `--reset` zeroes it). Every round is meant to be winnable, but the later ones should take a few tries and some store upgrades. Per round, all enemies get: **+10% hit points, +6% damage to you,
++5% attack rate** (this also makes summoners summon more often), **+3% shot speed** (up to 2x), **+3% walking speed** (up to 2x) and **+8% summoning**: how many enemies a summoner may have alive,
 the game-wide summon cap (`TUNING.maxEnemies`) and how many it summons per cast, and a shorter warning before they appear. The numbers are `growth` in the ARENA entry of `LEVELS`; set a large round in
-`doom_progress.txt` (`"arena": 60`) to jump straight to a heavy one. It is meant for finding out how much the game can take before it slows down or crashes.
+`doom_progress.txt` (`"arena": 60`) to jump straight to a heavy one. It doubles as the benchmark: use `--bench` (below) to find out how much the game can take before it slows down or crashes. Measured on one PC: it stays smooth up to about 600 enemies and 4,000 shots and falls to ~7 fps at about 700 and 5,000.
 
 ### Performance log
 
@@ -118,7 +118,7 @@ Every run on any level is measured while you play and logged when it ends (death
 ### Benchmark mode
 
 `run doom.js --bench` needs no keyboard: it skips the title screen, picks the ARENA, turns on every cheat (the runs are marked `cheats:true` and earn nothing), puts you inside the big room just past the door and lets
-the round run for `--benchsecs` seconds (default 60). It then logs the run (result `BENCH`), raises the round by `--benchstep` (default 10) and starts again. It stops when the round passes `--benchmax` (default 150), when a
+the round run for `--benchsecs` seconds (default 60). It then logs the run (result `BENCH`), raises the round by `--benchstep` (default 10) and starts again. It stops when the round passes `--benchmax` (default 250), when a
 round's average work per frame is over twice the budget (80 ms: the game is unplayable by then) or when you press Esc. Your saved progress (round, points, purchases) is not read from or written to; the rounds come from the flags.
 Example: `run doom.js --bench --benchfrom 30 --benchstep 10 --benchsecs 45` runs rounds 31, 41, 51 and so on. The one-line result of every round is printed to the terminal and every round gets its full line in `doom_bench.txt`
 (plus the 30-second snapshots), so you can leave it running and read the file afterwards. F3 still shows the live line, and F4 kills everything if you want to watch a round clear.

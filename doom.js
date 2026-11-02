@@ -183,17 +183,17 @@ const SPRITE_ALIASES = {
 const LEVELS = [
   { name: 'ROOMS: Square rooms', map: 'map_rooms.txt', par: 600, keyDrops: true, winOnArchviles: true },   // seven square rooms in a snake, one locked door between each (built by make_rooms.py)
   // ARENA: a store room plus ONE big square room. The enemies are not in the map: startLevel() spawns `enemies + perRound * round` of them at random in `room` (a tile
-  // rectangle, from make_arena.py) from `pool`, plus the `summoners` ([type, base count, extra per round]). Every death AND every clear raises the saved `arenaRound` by one, and
+  // rectangle, from make_arena.py) from `pool`, plus the `summoners` ([type, base count, extra per round]). Every CLEAR (not a death: after dying you retry the same round) raises the saved `arenaRound` by one, and
   // `growth` says how much each enemy stat grows per round (a stat is 1 + growth * round): hp, damage (to you), fire (attack chance, including how often summoners summon),
   // projectile (shot speed), speed (walking speed), summon (how many enemies a summoner may have alive, the overall summon cap, and how often it summons). `caps` stops
   // a stat that would break the physics (default no cap). It is the benchmark level: the run's performance numbers are logged (see PERFORMANCE LOG).
   { name: 'ARENA: Endless', map: 'map_arena.txt', par: 0,
     arena: {
-      room: { x0: 19, y0: 1, x1: 48, y1: 30 }, enemies: 16, perRound: 4, safeColumns: 4,
+      room: { x0: 19, y0: 1, x1: 48, y1: 30 }, enemies: 16, perRound: 3, safeColumns: 4,
       pool: ['ZOMBIE', 'ZOMBIESERGEANT', 'IMP', 'DEMON', 'CACODEMON', 'LOSTSOUL', 'BARON', 'ZOMBIETANK', 'ZOMBIEMISSILETANK', 'ZOMBIEPLASMATANK', 'CRYOBUS'],
-      summoners: [['PAINELEMENTAL', 1, 0.5], ['ARCHVILE', 0, 0.34]],
-      growth: { hp: 0.15, damage: 0.10, fire: 0.10, projectile: 0.05, speed: 0.05, summon: 0.15 },
-      caps: { speed: 2.5, projectile: 3 },
+      summoners: [['PAINELEMENTAL', 1, 0.5], ['ARCHVILE', 0, 0.25]],
+      growth: { hp: 0.10, damage: 0.06, fire: 0.05, projectile: 0.03, speed: 0.03, summon: 0.08 },   // (tuned so every round can be won, but the later ones take a few tries and store upgrades)
+      caps: { speed: 2, projectile: 2 },
     } },
   { name: 'HANGAR: E1M1', map: ASSETS.map, par: 300 },   // the hand-drawn Doom-style map: enemies, pickups, keys on the map, an Arch-vile boss in front of the exit
 ];
@@ -526,6 +526,8 @@ const DECORATIONS = {
 // blob: { tag, chars, size }  ASCII drawing used when there is no PNG: size in tiles, chars go from the centre outward.
 // Player weapons only:
 //   splash     { radius, damage, hurtsPlayer }  explosion damage to everything in line of sight, fading with distance
+//   clearRoom  { range, spare, spareRadius }     (the BFG) the blast kills EVERY enemy it can see within `range` tiles, whatever its health; enemies whose type is listed in `spare` are
+//                                                hurt instead for the projectile's `damage`, once per blast, and only within `spareRadius` (no splash falloff, no scaling with their health). Props and announced spawns in view are cleared too
 //   explosion  { ttl, tag, chars, size }        the ASCII flash left behind (ttl in ticks)
 //   explosionSound                              sound name played when it goes off
 // One table serves enemy shots AND player weapon shots (the `owner` field on a live projectile tells them apart).
@@ -561,7 +563,8 @@ const PROJECTILES = {
   },
   bfgball: {
     speed: 0.30, damage: 15, sprite: false, blob: { tag: '\x1D', chars: '@*+', size: 1.0 },
-    splash: { radius: 5, damage: 12, hurtsPlayer: false },
+    // The BFG clears the room: everything in view dies except the three big bosses, which take 15 per blast (an Arch-vile 3 blasts, a Cyberdemon 2, a Spider Mastermind 4 at their base health).
+    clearRoom: { range: 40, spare: ['ARCHVILE', 'CYBERDEMON', 'SPIDERMASTERMIND'], spareRadius: 5 },
     explosion: { ttl: 14, tag: '\x1D', chars: '@*+.', size: 6 }, explosionSound: 'bfgexplode',
   },
 };
@@ -963,7 +966,7 @@ export async function main(ns) {
   // average work per frame of a round is over twice the frame budget (the game is unplayable by then), or Esc is pressed. Your saved progress (rounds, points, purchases) is never touched or written.
   const BENCH = !!flags.bench;
   const BENCH_SECS = Math.max(10, Math.floor(Number(flags.benchsecs)) || 60), BENCH_FROM = Math.max(0, Math.floor(Number(flags.benchfrom)) || 0);
-  const BENCH_STEP = Math.max(1, Math.floor(Number(flags.benchstep)) || 10), BENCH_MAX = Math.max(BENCH_FROM, Math.floor(Number(flags.benchmax)) || 150);
+  const BENCH_STEP = Math.max(1, Math.floor(Number(flags.benchstep)) || 10), BENCH_MAX = Math.max(BENCH_FROM, Math.floor(Number(flags.benchmax)) || 250);
   const INFINITE_HEALTH = !!flags.godmode || BENCH;
   const INFINITE_AMMO = !!flags.infiniteammo || BENCH;
   const ALL_WEAPONS = !!flags.allweapons || BENCH;
@@ -974,7 +977,7 @@ export async function main(ns) {
   // Read at start, written whenever a run ends. A missing or unreadable file means a fresh start; an older file holding just a number
   // is read as the death count. The end screen shows the last few runs as bars, and H opens the full history (see historyLines).
   const REFUNDED_ITEMS = { key_blue: 400, key_red: 1000, key_yellow: 2000 };   // store items that no longer exist, with what they cost
-  let arenaRound = 0;   // deaths + clears so far on the ARENA level: how much harder it is (see LEVELS)
+  let arenaRound = 0;   // rooms cleared so far on the ARENA level: how much harder it is (see LEVELS)
   let avBest = 0;   // most Arch-viles you have killed in one run: weapon n in the STORE unlocks at n (see `unlock`)
   let deaths = 0, runs = [], points = 0, buys = {}, inv = {};
   const cleanCounts = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).map(([k, v]) => [k, Math.max(0, Math.floor(Number(v)) || 0)]).filter(([k, v]) => v > 0 && STORE.some(i => i.id === k)));
@@ -1005,7 +1008,7 @@ export async function main(ns) {
   function recordRun(result) {
     lastGain = CHEATING ? 0 : Math.max(0, score - bankedScore); bankedScore = score; points += lastGain;   // (cheat flags earn no points)
     const t = Math.max(0, Math.floor(((endTime || Date.now()) - gameStartTime) / 1000));
-    if (LEVELS[levelIndex].arena) arenaRound++;   // the next arena run is one round harder, whether you died or cleared it
+    if (LEVELS[levelIndex].arena && result === 'WON') arenaRound++;   // clearing the room makes the next one harder; dying retries the same round (with whatever the points bought)
     runs.push({ n: (runs.length ? runs[runs.length - 1].n : 0) + 1, r: result, lv: LEVELS[levelIndex].name.split(':')[0], t, k: kills, kt: countLevelEnemies(),
       sc: score, hp: Math.round(levelStart?.health ?? health), w: levelStart?.owned.length ?? owned.size, ch: CHEATING || undefined });
     if (runs.length > MAX_RUNS) runs.splice(0, runs.length - MAX_RUNS);
@@ -1017,7 +1020,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '110';
+  const VERSION = '112';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -2447,6 +2450,21 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     const def = PROJECTILES[p.type];
     p.alive = false;
     if (directHit) hitEnemy(directHit, p.damage, x, y, false);
+    const cr = def.clearRoom;
+    if (cr) {   // BFG: every enemy in view dies, except the spared bosses, which take p.damage once (their direct hit counts)
+      for (const e of enemies) {
+        if (!e.alive || e === directHit || e.def.prop) continue;
+        const d = Math.hypot(e.x - x, e.y - y);
+        if (d >= cr.range || !hasLineOfSight(x, y, e.x, e.y)) continue;
+        if (cr.spare.includes(e.type)) { if (d < cr.spareRadius) hitEnemy(e, p.damage, e.x, e.y, false); continue; }
+        e.kidKills = 1e9;   // (a shielded summoner other than the spared ones would die too)
+        hitEnemy(e, 1e9, e.x, e.y, false);
+      }
+      for (let i = pendingSpawns.length - 1; i >= 0; i--) {   // announced spawns in view never appear
+        const sp = pendingSpawns[i];
+        if (Math.hypot(sp.x - x, sp.y - y) < cr.range && hasLineOfSight(x, y, sp.x, sp.y)) pendingSpawns.splice(i, 1);
+      }
+    }
     const sp = def.splash;
     if (sp) {
       for (const e of enemies) {
