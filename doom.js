@@ -236,7 +236,7 @@ const DEFAULT_DIFFICULTY = 'normal';
 //                                  shareware DOS DOOM on the Internet Archive) decorations open (see DECORATIONS `use`), and how close (tiles) you must stand
 //   spawnWarningTicks              how long the fire-spike warning shows before a spawner's (Pain Elemental, Arch-vile) enemy appears
 //   freezeGraceTicks               after a freeze (PROJECTILES `freeze`) wears off you cannot be frozen again for this long
-//   maxEnemies                     spawners (Pain Elemental, Arch-vile) stop spawning while this many enemies are alive
+//   maxEnemies                     spawners (Pain Elemental, Arch-vile) stop spawning while this many SUMMONED enemies are alive (enemies placed on the map do not count)
 const TUNING = {
   mouseLook: true, mouseSensitivity: 0.0025,
   floorAndCeiling: true,
@@ -556,8 +556,10 @@ const PROJECTILES = {
 //  spawnable  false = an 'any' spawner never picks this type (Arch-vile so it can't summon more Arch-viles)
 //  spawnWeight  relative chance of being picked by an 'any' spawner (default 1; bosses are rare)
 //  painChance chance (0-1) that a hit makes it flinch for TUNING.painTicks (no moving or attacking)
-//  flee          { dist, ticks } makes the enemy run AWAY from a player it can see: whenever the player is closer than `dist`
+//  flee          { dist, ticks, speed } makes the enemy run AWAY from a player it can see: whenever the player is closer than `dist`
 //                tiles, and for `ticks` ticks after every successful summon. Used by the spawners so they can't be picked off.
+//                `speed` (tiles per tick) is how fast it runs while fleeing, separate from its normal `speed` (their walking speed is
+//                far below the player's, so without it they could not get away).
 //  stopDistance  while chasing a player it can see, it stops this many tiles away instead of walking into you
 //                (melee enemies set it just inside their bite range; 0 = keep pushing in)
 //  wakeOnDoor    true = when the player opens a door into the room this enemy is in, it charges at the player
@@ -765,7 +767,7 @@ const ENEMIES = {
   // Spawners: no attack of their own, they summon enemies near themselves while they can see you.
   PAINELEMENTAL: {
     mapChar: 'L', hp: 20, points: 400, killMsg: '** PAIN ELEMENTAL DESTROYED **',
-    speed: 0.012, sight: 16, roam: 12, hitbox: 1.0, painChance: 0.2, flee: { dist: 8, ticks: 60 },
+    speed: 0.012, sight: 16, roam: 12, hitbox: 1.0, painChance: 0.2, flee: { dist: 8, ticks: 60, speed: 0.10 },
     render: { zoom: 3.9, fall: 2.0, float: true }, spawnWeight: 0.5,
     blob: { tag: '\x1A', chars: '@O*.', size: 1.0 },
     sounds: { hurt: 'painelementalinjured', death: 'painelementaldeath' },
@@ -777,7 +779,7 @@ const ENEMIES = {
     mapChar: 'V', hp: 40, points: 1000, killMsg: '** ARCH-VILE BANISHED **',
     // Fast and keeps its distance (stopDistance) while it summons a random enemy from anywhere in the game.
     // spawnable: false so it can never summon another Arch-vile.
-    speed: 0.03, sight: 20, roam: 25, hitbox: 0.7, painChance: 0.1, stopDistance: 9, flee: { dist: 7, ticks: 70 }, relentless: true, spawnable: false,
+    speed: 0.03, sight: 20, roam: 25, hitbox: 0.7, painChance: 0.1, stopDistance: 9, flee: { dist: 7, ticks: 70, speed: 0.12 }, relentless: true, spawnable: false,
     render: { zoom: 3.1, fall: 1.0 },
     blob: { tag: '\x19', chars: '@O*.', size: 0.6 },
     sounds: { hurt: 'archvileinjured', death: 'archviledeath' },
@@ -884,7 +886,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '78';
+  const VERSION = '80';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -3222,13 +3224,13 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   // the player or another enemy. It does not create them at once: each spot gets a fire-spike WARNING (art
   // "Spawn_Warning_idle1..", ASCII sparks without it) and the enemy appears TUNING.spawnWarningTicks later, from
   // updatePendingSpawns(). Returns false (and does nothing) when the parent already has atk.maxAlive living or
-  // announced spawn, when TUNING.maxEnemies enemies are alive or announced, or when no free spot was found; the attack
+  // announced spawn, when TUNING.maxEnemies summoned enemies are alive or announced, or when no free spot was found; the attack
   // roll then simply happens again later. Summoned enemies start awake (they know where you are) and are flagged
   // `spawned`. Side effects: pushes onto `pendingSpawns` and `effects`.
   function trySpawn(parent, atk) {
     parent.kids = parent.kids.filter(k => k.alive);
     let alive = 0;
-    for (const o of enemies) if (o.alive) alive++;
+    for (const o of enemies) if (o.alive && o.spawned) alive++;   // only SUMMONED enemies count; a populated level has hundreds of map enemies, which used to block every summon
     alive += pendingSpawns.length;
     let mine = parent.kids.length + pendingSpawns.filter(p => p.parent === parent).length;
     let made = 0;
@@ -3324,11 +3326,11 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     }
   }
   // onDeath.spawn: something climbs out of the wreck (one random type from sp.types), awake and hunting. It tries a few
-  // spots around the wreck and falls back to the wreck's own tile. Skipped when TUNING.maxEnemies are alive. Flagged
+  // spots around the wreck and falls back to the wreck's own tile. Skipped when TUNING.maxEnemies summoned enemies are alive. Flagged
   // `spawned` like summoned enemies (no kill, no points, no corpse left behind).
   function deathSpawn(e, sp) {
     let alive = 0;
-    for (const o of enemies) if (o.alive) alive++;
+    for (const o of enemies) if (o.alive && o.spawned) alive++;   // only SUMMONED enemies count; a populated level has hundreds of map enemies, which used to block every summon
     if (alive + pendingSpawns.length >= TUNING.maxEnemies) return;
     const type = sp.types[Math.floor(Math.random() * sp.types.length)], r = ENEMIES[type].radius;
     let x = e.x, y = e.y;
@@ -3392,12 +3394,12 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
         if (def.flee && (e.fleeTicks > 0 || dist < def.flee.dist)) {
           // Run directly away from the player; if a wall blocks that, slide along it (try both sideways directions)
           if (e.fleeTicks > 0) e.fleeTicks--;
-          const ox = e.x, oy = e.y;
-          moveEnemy(e, -dx, -dy, dist, spd);
+          const ox = e.x, oy = e.y, fs = def.flee.speed ?? spd;
+          moveEnemy(e, -dx, -dy, dist, fs);
           if (e.x === ox && e.y === oy) {
             const s1 = (e.id ?? 0) % 2 ? 1 : -1;
-            moveEnemy(e, -dy * s1, dx * s1, dist, spd);
-            if (e.x === ox && e.y === oy) moveEnemy(e, dy * s1, -dx * s1, dist, spd);
+            moveEnemy(e, -dy * s1, dx * s1, dist, fs);
+            if (e.x === ox && e.y === oy) moveEnemy(e, dy * s1, -dx * s1, dist, fs);
           }
         } else if (dist > def.stopDistance) moveEnemy(e, dx, dy, dist, spd);   // else: already in biting range, hold and attack
       } else if (e.memTicks > 0) {

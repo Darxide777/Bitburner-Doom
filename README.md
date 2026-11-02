@@ -202,7 +202,7 @@ just a new table entry. Each table has a comment explaining its fields.
    Arch-vile entries). The enemy does not appear at once: a fire-spike warning (`Spawn_Warning_idle1`, `_idle2`, shared by every
    spawner) shows at the spot for `TUNING.spawnWarningTicks` (default 14, about half a second) first; ASCII sparks are used
    without that art. If the summoner dies during the warning, nothing appears.
-   Spawners also have `flee: { dist, ticks }`: they run away from a player they can see when closer than `dist` tiles, and for
+   Spawners also have `flee: { dist, ticks, speed }`: they run away (at `speed` tiles per tick, much faster than their normal walk) from a player they can see when closer than `dist` tiles, and for
    `ticks` ticks after every summon, so they can't just be shot while standing still. (They also have much more health.)
 7. Scenery you can shoot (like the barrel) is an `ENEMIES` entry with `prop: true` and an `onDeath.explode` block
    (`hurtsEnemies` and `falloff` control who it hurts and how the damage fades).
