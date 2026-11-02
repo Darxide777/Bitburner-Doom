@@ -182,16 +182,19 @@ const SPRITE_ALIASES = {
 // which map files to download, so keep that spelling.)
 const LEVELS = [
   { name: 'ROOMS: Square rooms', map: 'map_rooms.txt', par: 600, keyDrops: true, winOnArchviles: true },   // seven square rooms in a snake, one locked door between each (built by make_rooms.py)
-  // ARENA: a store room plus ONE big square room. The enemies are not in the map: startLevel() spawns `enemies + perRound * round` of them at random in `room` (a tile
-  // rectangle, from make_arena.py) from `pool`, plus the `summoners` ([type, base count, extra per round]). Every CLEAR (not a death: after dying you retry the same round) raises the saved `arenaRound` by one, and
+  // ARENA: a store room plus ONE big square room, generated fresh every time you enter it (buildArenaRows(): no map file). The room is `size.base` tiles square and grows by
+  // `size.growBy` every `size.every` rounds (up to `size.max`). It gets random NUKAGE pools (one per `hazards.poolPerTiles` tiles of floor) and exploding BARRELS (one per
+  // `hazards.barrelPerTiles`), in new places each time. startArena() then adds the enemies: the `summoners` ([type, base count, extra per round]; here `1 + round` Arch-viles, so the
+  // fight is Arch-viles that summon random enemies), never in the `safeColumns` columns nearest the door. `enemies`/`perRound`/`pool` can still add ordinary enemies (none now).
+  // Every CLEAR (not a death: after dying you retry the same round) raises the saved `arenaRound` by one, and
   // `growth` says how much each enemy stat grows per round (a stat is 1 + growth * round): hp, damage (to you), fire (attack chance, including how often summoners summon),
   // projectile (shot speed), speed (walking speed), summon (how many enemies a summoner may have alive, the overall summon cap, and how often it summons). `caps` stops
-  // a stat that would break the physics (default no cap). It is the benchmark level: the run's performance numbers are logged (see PERFORMANCE LOG).
-  { name: 'ARENA: Endless', map: 'map_arena.txt', par: 0,
+  // a stat that would break the physics (default no cap). It is also the benchmark level: the run's performance numbers are logged (see PERFORMANCE LOG).
+  { name: 'ARENA: Endless', map: null, par: 0,
     arena: {
-      room: { x0: 19, y0: 1, x1: 48, y1: 30 }, enemies: 16, perRound: 3, safeColumns: 4,
-      pool: ['ZOMBIE', 'ZOMBIESERGEANT', 'IMP', 'DEMON', 'CACODEMON', 'LOSTSOUL', 'BARON', 'ZOMBIETANK', 'ZOMBIEMISSILETANK', 'ZOMBIEPLASMATANK', 'CRYOBUS'],
-      summoners: [['PAINELEMENTAL', 1, 0.5], ['ARCHVILE', 0, 0.25]],
+      size: { base: 30, growBy: 6, every: 5, max: 66 }, hazards: { poolPerTiles: 300, barrelPerTiles: 80 },
+      enemies: 0, perRound: 0, safeColumns: 4, pool: [],
+      summoners: [['ARCHVILE', 1, 1]],
       growth: { hp: 0.10, damage: 0.06, fire: 0.05, projectile: 0.03, speed: 0.03, summon: 0.08 },   // (tuned so every round can be won, but the later ones take a few tries and store upgrades)
       caps: { speed: 2, projectile: 2 },
     } },
@@ -1020,7 +1023,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '114';
+  const VERSION = '115';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1061,12 +1064,46 @@ export async function main(ns) {
   let doorList = [];                // tile indices of every door
   let secretsTotal = 0;
 
+  // ARENA map generator. Builds the map as rows of text, the same characters a map file uses: a start room (the store cabinet C and the player P), a corridor with a door D,
+  // and one big square room whose size depends on the round (A.size: base, +growBy every `every` rounds, up to max). The room gets random nukage pools (~) and exploding
+  // barrels (0), more of them the bigger it is, none in the safeColumns next to the door. Sets arenaRoom to the room's tile rectangle (startArena puts the enemies in it).
+  // Every call is different (Math.random).
+  let arenaRoom = null;
+  const arenaSize = (A, round) => Math.min(A.size.max, A.size.base + A.size.growBy * Math.floor(round / A.size.every));
+  function buildArenaRows(A) {
+    const S = arenaSize(A, arenaRound), SX = 12, SY = 8, GAP = 5;
+    const W = 1 + SX + 1 + GAP + S + 1, H = Math.max(S + 2, 32);
+    const g = Array.from({ length: H }, () => Array(W).fill('#'));
+    const ax0 = W - 1 - S, ax1 = W - 2, ay0 = 1, ay1 = S, mid = ay0 + Math.floor(S / 2);
+    for (let y = ay0; y <= ay1; y++) for (let x = ax0; x <= ax1; x++) g[y][x] = '.';
+    const sy0 = mid - Math.floor(SY / 2), sy1 = sy0 + SY - 1;
+    for (let y = sy0; y <= sy1; y++) for (let x = 1; x <= SX; x++) g[y][x] = '.';
+    const cor0 = SX + 1, cor1 = ax0 - 1;
+    for (let x = cor0; x <= cor1; x++) g[mid][x] = '.';
+    g[mid][Math.floor((cor0 + cor1) / 2)] = 'D';
+    g[sy0 + 1][4] = 'C'; g[sy0 + 4][4] = 'P';
+    const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+    const free = (A.safeColumns ?? 0) + 1;   // columns next to the door stay clear
+    const area = S * S;
+    for (let k = Math.max(2, Math.round(area / A.hazards.poolPerTiles)); k > 0; k--) {   // nukage pools: random rectangles, one tile away from the walls
+      const w = rnd(3, 6), h = rnd(3, 6), x0 = rnd(ax0 + free, ax1 - w), y0 = rnd(ay0 + 1, ay1 - h);
+      for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) g[y][x] = '~';
+    }
+    for (let k = Math.round(area / A.hazards.barrelPerTiles), tries = 0; k > 0 && tries < 2000; tries++) {
+      const x = rnd(ax0 + free, ax1), y = rnd(ay0, ay1);
+      if (g[y][x] === '.') { g[y][x] = '0'; k--; }
+    }
+    arenaRoom = { x0: ax0, y0: ay0, x1: ax1, y1: ay1 };
+    return g.map(row => row.join(''));
+  }
+
   function parseMap(levelIndex) {
     const file = LEVELS[levelIndex].map;
     // Rows copied out of a JS/JSON array look like  "#....#",  : the leading quote and the trailing quote/comma are
     // blanked IN PLACE (not deleted, so every column keeps its position) and treated as void, with no warning.
     // Quotes or commas anywhere else in a row still trigger the unknown-character warning below.
-    const rows = (ns.read(file) || '').split('\n').filter(line => line.length > 0)
+    // (The ARENA has no map file: its rows are generated, see buildArenaRows.)
+    const rows = LEVELS[levelIndex].arena ? buildArenaRows(LEVELS[levelIndex].arena) : (ns.read(file) || '').split('\n').filter(line => line.length > 0)
       .map(r => r.trimEnd().replace(/^"/, ' ').replace(/",?$/, m => ' '.repeat(m.length)).trimEnd());
     if (!rows.length) throw new Error(`map file "${file}" is missing or empty`);
     MH = rows.length;
@@ -1940,7 +1977,7 @@ export async function main(ns) {
       if (w.ammoType != null && !AMMO_TYPES[w.ammoType]) problems.push(`weapon ${id}: unknown ammoType "${w.ammoType}"`);
     }
     for (const p of Object.values(PICKUPS)) if (p.sound) sounds.add(p.sound);
-    for (const lv of LEVELS) if (!(ns.read(lv.map) || '').trim()) problems.push(`level "${lv.name}": map file ${lv.map} is missing or empty`);
+    for (const lv of LEVELS) if (lv.map && !(ns.read(lv.map) || '').trim()) problems.push(`level "${lv.name}": map file ${lv.map} is missing or empty`);
     for (const [id, e] of Object.entries(ENEMIES)) {
       Object.values(e.sounds).forEach(s => sounds.add(s));
       if (e.onDeath?.explode?.sound) sounds.add(e.onDeath.explode.sound);
@@ -4080,15 +4117,16 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     currentWeapon = (!ALL_WEAPONS && gotWeapons.length ? gotWeapons[gotWeapons.length - 1] : [...owned][0]) ?? Object.keys(WEAPONS)[0];
   }
 
-  // ARENA: adds the level's random enemies to spawns.enemies (see the `arena` notes at LEVELS): `enemies + perRound * round` from the pool, one per floor tile, never in
-  // the `safeColumns` columns nearest the door, plus each summoner type (`base + per * round`, rounded down). Sets runRound and arenaArmed (clear detection).
+  // ARENA: adds the level's enemies to spawns.enemies (see the `arena` notes at LEVELS): each summoner type (`base + per * round`, rounded down; the Arch-viles), one per floor tile (never on
+  // nukage or a barrel), never in the `safeColumns` columns nearest the door, plus `enemies + perRound * round` from the pool if there is one. Sets runRound and arenaArmed (clear detection).
   let arenaArmed = false, arenaCheck = 0;
   function startArena(index) {
     const A = LEVELS[index].arena;
     arenaArmed = false;
     if (!A) return;
     runRound = arenaRound;
-    const R = A.room, want = Math.floor(A.enemies + A.perRound * runRound), used = new Set();
+    const R = arenaRoom, want = Math.floor(A.enemies + A.perRound * runRound), used = new Set();
+    for (const e of spawns.enemies) used.add(Math.floor(e.y) * MW + Math.floor(e.x));   // (the barrels the generator placed)
     const add = type => {
       for (let tries = 0; tries < 60; tries++) {
         const x = R.x0 + (A.safeColumns ?? 0) + Math.floor(Math.random() * (R.x1 - R.x0 + 1 - (A.safeColumns ?? 0))), y = R.y0 + Math.floor(Math.random() * (R.y1 - R.y0 + 1));
@@ -4099,7 +4137,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
       return false;
     };
     for (const [type, base, per] of A.summoners ?? []) for (let i = 0; i < Math.floor(base + per * runRound); i++) add(type);
-    for (let i = 0; i < want; i++) add(A.pool[Math.floor(Math.random() * A.pool.length)]);
+    if (A.pool?.length) for (let i = 0; i < want; i++) add(A.pool[Math.floor(Math.random() * A.pool.length)]);
     arenaArmed = spawns.enemies.length > 0;
   }
   function startLevel(index, mode) {
@@ -4217,7 +4255,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   // BENCHMARK MODE helpers (see BENCH). benchPlace puts the player inside the big room, just past the door, facing east (no enemy spawns in the first `safeColumns` columns).
   // benchNext is called when a round's time is up: returns true if another (harder) round was started, false when the benchmark is over.
   function benchPlace() {
-    const R = LEVELS[levelIndex].arena.room;
+    const R = arenaRoom;
     px = R.x0 + 1.5; py = Math.floor((R.y0 + R.y1) / 2) + 0.5; pa = 0;
   }
   function benchNext(out) {
