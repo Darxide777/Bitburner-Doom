@@ -1023,7 +1023,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '115';
+  const VERSION = '116';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1662,8 +1662,13 @@ export async function main(ns) {
     if (storeResume) setPaused(false);
     root.focus();
   }
+  // The game's keys must NOT reach Bitburner's terminal: with the terminal input focused, Up pulled the last command (run doom.js) back into it and Enter then ran it again.
+  // So onKey is registered in the CAPTURE phase (it runs before Bitburner sees the event) and takes the event (stopPropagation + preventDefault) for every key the game uses,
+  // unless Ctrl/Alt/Meta is held (browser shortcuts keep working). Enter and H are used by the title and end screens.
+  const TAKEN_KEYS = new Set([...BLOCKED_KEYS, 'Enter', 'h']);
   function onKey(e) {
     const k = normKey(e.key);
+    if (!terminalEl && !e.ctrlKey && !e.altKey && !e.metaKey && (storeEl || TAKEN_KEYS.has(k))) { e.preventDefault(); e.stopPropagation(); }
     if (terminalEl) {   // the overlay owns the keyboard: only Escape (close it) is ours
       if (e.type === 'keydown' && k === 'Escape') closeTerminal();
       return;
@@ -1703,8 +1708,8 @@ export async function main(ns) {
   doc.addEventListener('mousemove', onMouseMove);
   doc.addEventListener('mousedown', onMouseDown);
   doc.addEventListener('mouseup', onMouseUp);
-  doc.addEventListener('keydown', onKey);
-  doc.addEventListener('keyup', onKey);
+  doc.addEventListener('keydown', onKey, true);   // (capture phase, see TAKEN_KEYS)
+  doc.addEventListener('keyup', onKey, true);
   win.addEventListener('blur', onBlur);
 
   // `running` is the single "keep going" flag: every loop tests it, and ESC, the [ESC] button, cleanup() and the end
@@ -1725,8 +1730,8 @@ export async function main(ns) {
     try { terminalEl?.remove(); } catch (e) { }
     try { storeEl?.remove(); } catch (e) { }
     root.remove();
-    doc.removeEventListener('keydown', onKey);
-    doc.removeEventListener('keyup', onKey);
+    doc.removeEventListener('keydown', onKey, true);
+    doc.removeEventListener('keyup', onKey, true);
     doc.removeEventListener('click', refocusHandler);
     win.removeEventListener('blur', onBlur);
     doc.removeEventListener('mousemove', onMouseMove);
