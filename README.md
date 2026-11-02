@@ -65,6 +65,17 @@ Opens a full-screen map and pauses the game. The outline of the level is always 
 have seen them. The exit is always marked, and items still lying around are shown even in unexplored areas. Enemies
 are never shown. `D` is a door, `K` a locked door, `E` the exit, the arrow is you.
 
+## The first level (E1M1: Hangar)
+
+You start in the south-east in a safe room with the three arcade cabinets (no enemies, some supplies). The route to the exit in
+the far west goes: first hall (blue key) -> blue door -> a small room -> a cave -> the big northern caves. The red key is in the room
+on the north-east side, the yellow key in the room west of the middle, and the exit room is behind the red door and then the
+yellow door. The exit room is held by two Arch-viles and two Pain Elementals. Every enemy type, every pickup, every weapon,
+every decoration and every tile type appears at least once. A dead-end corridor off the east side of the second cave
+leads to a secret wall (press F on it); behind it is a hidden room with the BFG 9000. Two nukage pools sit in the first
+hall and the big cave (a radiation suit lies near the first). Two rooms use the brick (`%`) and tech (`&`) wall looks.
+Health, armor and ammo are plentiful, with more near the exit. About 230 enemies in all, so expect long fights.
+
 ## Map files
 
 A level is a text file, one character per tile. Rows can be different lengths (a missing character is solid rock) and
