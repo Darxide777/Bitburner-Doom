@@ -10,7 +10,6 @@ export async function main(ns) {
   const FILES = [
     ['doom.js', ''],
     ['map.txt', ''],
-    ['map_rooms.txt', ''],
     ['audio.json', ' (this may take a moment)'],
     ['sprites.json', ' (this may take a moment)'],
   ];

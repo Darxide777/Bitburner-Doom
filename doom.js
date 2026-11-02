@@ -177,14 +177,13 @@ const SPRITE_ALIASES = {
 // history records). par: seconds shown as the par time. Each map is a text file in the same folder as doom.js. Winning a level offers to play it again (it does not move on to the
 // next entry; the levels are separate maps, not an episode).
 // Optional level flags: keyDrops (each map Arch-vile you kill drops the next keycard, KEYS order, see reachCheckpoint) and winOnArchviles (killing all of the map's
-// Arch-viles wins the level, instead of or as well as an exit tile). Dying restarts the level with what the store gives you. To add a level, copy a line and name your file.
+// Arch-viles wins the level, instead of or as well as an exit tile); no level uses them now (the square-rooms level was removed) but they still work. Dying restarts the level with what the store gives you. To add a level, copy a line and name your file.
 // (install.js looks for the property name `map` + a colon + a quoted file name in this repo's doom.js to know
 // which map files to download, so keep that spelling.)
 const LEVELS = [
-  { name: 'ROOMS: Square rooms', map: 'map_rooms.txt', par: 600, keyDrops: true, winOnArchviles: true },   // seven square rooms in a snake, one locked door between each (built by make_rooms.py)
   // ARENA: a store room plus ONE big square room, generated fresh every time you enter it (buildArenaRows(): no map file). The room is `size.base` tiles square and grows by
-  // `size.growBy` every `size.every` rounds (up to `size.max`). It gets random NUKAGE pools (one per `hazards.poolPerTiles` tiles of floor) and exploding BARRELS (one per
-  // `hazards.barrelPerTiles`), in new places each time. startArena() then adds the enemies: the `summoners` ([type, base count, extra per round]; here `1 + round` Arch-viles, so the
+  // `size.growBy` for every `size.perArchviles` Arch-vile of the round (up to `size.max`). It gets random NUKAGE pools (one per `hazards.poolPerTiles` tiles of floor) and exploding BARRELS (one per
+  // `hazards.barrelPerTiles`), in new places each time. startArena() then adds the enemies: the `summoners` ([type, base count, extra per round]; here 1 + round/2 Arch-viles, one more every second round, so the
   // fight is Arch-viles that summon random enemies), never in the `safeColumns` columns nearest the door. `enemies`/`perRound`/`pool` can still add ordinary enemies (none now).
   // Every CLEAR (not a death: after dying you retry the same round) raises the saved `arenaRound` by one, and
   // `growth` says how much each enemy stat grows per round (a stat is 1 + growth * round): hp, damage (to you), fire (attack chance, including how often summoners summon),
@@ -192,9 +191,9 @@ const LEVELS = [
   // a stat that would break the physics (default no cap). It is also the benchmark level: the run's performance numbers are logged (see PERFORMANCE LOG).
   { name: 'ARENA: Endless', map: null, par: 0,
     arena: {
-      size: { base: 30, growBy: 6, every: 5, max: 66 }, hazards: { poolPerTiles: 300, barrelPerTiles: 80 },
+      size: { base: 30, growBy: 6, perArchviles: 5, max: 66 }, hazards: { poolPerTiles: 300, barrelPerTiles: 80 },
       enemies: 0, perRound: 0, safeColumns: 4, pool: [],
-      summoners: [['ARCHVILE', 1, 1]],
+      summoners: [['ARCHVILE', 1, 0.5]],   // 1 Arch-vile in round 1, one more every second round (rounds 3, 5, 7...)
       growth: { hp: 0.10, damage: 0.06, fire: 0.05, projectile: 0.03, speed: 0.03, summon: 0.08 },   // (tuned so every round can be won, but the later ones take a few tries and store upgrades)
       caps: { speed: 2, projectile: 2 },
     } },
@@ -296,6 +295,7 @@ const DEFAULT_DIFFICULTY = 'normal';
 //   terminalUrl / doomUrl / terminalRange   the pages the `use: 'terminal'` (the Bitburner cabinet: web Bitburner) and `use: 'doom'` (the DOOM cabinet:
 //                                  shareware DOS DOOM on the Internet Archive) decorations open (see DECORATIONS `use`), and how close (tiles) you must stand
 //   spawnWarningTicks              how long the fire-spike warning shows before a spawner's (Pain Elemental, Arch-vile) enemy appears
+//   priceMultiplier                every STORE price (the `price` numbers in the table) is multiplied by this; 2 = double
 //   freezeGraceTicks               after a freeze (PROJECTILES `freeze`) wears off you cannot be frozen again for this long
 //   maxEnemies                     spawners (Pain Elemental, Arch-vile) stop spawning while this many SUMMONED enemies are alive (enemies placed on the map do not count)
 const TUNING = {
@@ -311,6 +311,7 @@ const TUNING = {
   threat: { hp: 0.10, damage: 0.05 },   // every Arch-vile you kill (this run) makes ALL enemies this much tougher: +10% hit points and +5% damage to you, each kill (stacking; see threatMult)
   checkpointHeal: 50,   // health you get when a map-placed Arch-vile dies (also a CHECKPOINT, see `checkpoint`); never above 100 (or what you already have)
   freezeGraceTicks: 125,   // 5 seconds
+  priceMultiplier: 2,      // every STORE price is multiplied by this (points were coming in too fast: 2 = everything costs double, same as earning half)
   spawnWarningTicks: 14,   // about half a second
   itemGrowth: 20,   // pickups, projectiles and effects grow as you approach, up to this many times their picture size. High on purpose: a low cap (it was 4) made big things such as the scale-3 explosions stop growing about 4 tiles away while the walls kept growing, so they looked smaller up close
   rangedReachView: true,   // ranged attacks and hitscan shots reach the whole view distance (see above)
@@ -1008,10 +1009,20 @@ export async function main(ns) {
   // Adds the run that just ended (result 'DIED' or 'WON') to the history and saves it. Call once, after endTime and score are final.
   let bankedScore = 0;   // how much of the current `score` is already in `points` (the score carries over between levels of one run, so only the new part is banked)
   let lastGain = 0;      // points the last recordRun() banked (shown on the end screen)
+  let arenaUnlockMsg = '';   // shown with the 'ARENA CLEARED' message when that clear unlocked a weapon
   function recordRun(result) {
     lastGain = CHEATING ? 0 : Math.max(0, score - bankedScore); bankedScore = score; points += lastGain;   // (cheat flags earn no points)
     const t = Math.max(0, Math.floor(((endTime || Date.now()) - gameStartTime) / 1000));
-    if (LEVELS[levelIndex].arena && result === 'WON') arenaRound++;   // clearing the room makes the next one harder; dying retries the same round (with whatever the points bought)
+    if (LEVELS[levelIndex].arena && result === 'WON') {
+      arenaRound++;   // clearing the room makes the next one harder; dying retries the same round (with whatever the points bought)
+      // Store unlocks in the ARENA come from clearing rooms: every SECOND clear unlocks the next weapon (clear 2 the chaingun, 4 the rocket launcher, 6 the plasma rifle, 8 the BFG). Cheat runs unlock nothing.
+      // (The Arch-viles of the next round: one more after every unlock, because the count grows every second round.)
+      if (!CHEATING && arenaRound % 2 === 0 && arenaRound / 2 > avBest) {
+        avBest = arenaRound / 2;
+        const w = WEAPONS[STORE.find(i => i.unlock === avBest)?.weapon]?.name;
+        if (w) arenaUnlockMsg = `   STORE: ${w} UNLOCKED`;
+      }
+    }
     runs.push({ n: (runs.length ? runs[runs.length - 1].n : 0) + 1, r: result, lv: LEVELS[levelIndex].name.split(':')[0], t, k: kills, kt: countLevelEnemies(),
       sc: score, hp: Math.round(levelStart?.health ?? health), w: levelStart?.owned.length ?? owned.size, ch: CHEATING || undefined });
     if (runs.length > MAX_RUNS) runs.splice(0, runs.length - MAX_RUNS);
@@ -1023,7 +1034,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '116';
+  const VERSION = '120';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1069,7 +1080,9 @@ export async function main(ns) {
   // barrels (0), more of them the bigger it is, none in the safeColumns next to the door. Sets arenaRoom to the room's tile rectangle (startArena puts the enemies in it).
   // Every call is different (Math.random).
   let arenaRoom = null;
-  const arenaSize = (A, round) => Math.min(A.size.max, A.size.base + A.size.growBy * Math.floor(round / A.size.every));
+  // Arch-viles in a round (summoners entry: base + per * round, rounded down), and the room size from that: +growBy every `perArchviles` Arch-viles.
+  const arenaArchviles = (A, round) => { const e = (A.summoners || []).find(x => x[0] === 'ARCHVILE') || ['', 1, 0]; return Math.floor(e[1] + e[2] * round); };
+  const arenaSize = (A, round) => Math.min(A.size.max, A.size.base + A.size.growBy * Math.floor((arenaArchviles(A, round) - 1) / A.size.perArchviles));
   function buildArenaRows(A) {
     const S = arenaSize(A, arenaRound), SX = 12, SY = 8, GAP = 5;
     const W = 1 + SX + 1 + GAP + S + 1, H = Math.max(S + 2, 32);
@@ -1573,7 +1586,7 @@ export async function main(ns) {
   let storeEl = null, storeResume = false, storeTab = 0, storeSel = 0, storeMsg = '';
   const storeItems = () => STORE.filter(i => i.cat === STORE_CATS[storeTab]);
   const itemName = i => i.name || (i.weapon ? WEAPONS[i.weapon]?.name : i.ammo ? AMMO_TYPES[i.ammo].name : i.id.toUpperCase());
-  const itemPrice = i => Math.round(i.price * (1 + (i.growth || 0) * bought(i.id)));
+  const itemPrice = i => Math.round(i.price * TUNING.priceMultiplier * (1 + (i.growth || 0) * bought(i.id)));   // (priceMultiplier: every price in the table below, times this)
   const itemMax = i => i.max ?? (i.weapon ? 1 : i.hotkey ? STORE_MAX_STOCK : Infinity);
   const itemCount = i => (i.hotkey ? inv[i.id] : bought(i.id)) || 0;
   const itemLocked = i => (i.unlock || 0) > avBest && !ALL_WEAPONS;
@@ -3615,7 +3628,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     if (won || gameOver) return;
     won = true; endTime = Date.now(); score += 1000;
     recordRun('WON');   // winning does not reset anything: the history and your points carry on
-    flash(`${text || LEVELS[levelIndex].name.split(':')[0] + ' COMPLETE!'} +1000`, 9999);
+    flash(`${text || LEVELS[levelIndex].name.split(':')[0] + ' COMPLETE!'} +1000${arenaUnlockMsg}`, 9999); arenaUnlockMsg = '';
     updateHud();
   }
   // THREAT: each Arch-vile killed this run (checkpoint.dead) multiplies enemy hit points / damage by 1 + TUNING.threat[stat] per kill. A new run after dying keeps it
