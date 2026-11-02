@@ -206,7 +206,7 @@ const START = { health: 100, armor: 0, weapons: ['chainsaw'] };   // what every 
 // sign, use:'store'): face it and press F. What you buy is kept for every later run AND takes effect immediately in the run you are in.
 // An item is one entry here:
 //   id       unique name, also the key in the saved `buys` (bought count) / `inv` (stock of a consumable)
-//   cat      tab it appears under: WEAPONS | AMMO | SURVIVAL | KEYS | ITEMS (the order of STORE_CATS)
+//   cat      tab it appears under: WEAPONS | AMMO | SURVIVAL | ITEMS (the order of STORE_CATS)
 //   name, desc   shown in the store (weapon / key / ammo items take their name from WEAPONS / KEYS / AMMO_TYPES when `name` is left out)
 //   price    cost of the first purchase; growth = extra fraction of price added per earlier purchase (0.25: 100, 125, 150 ...)
 //   max      most times it can be bought (weapons and keys: 1; tiers: leave out = no limit)
@@ -214,12 +214,11 @@ const START = { health: 100, armor: 0, weapons: ['chainsaw'] };   // what every 
 //   weapon: id of WEAPONS          you start every run with it (its ammo type starts with AMMO_TYPES[].start rounds, once any weapon of that type is owned)
 //   ammo: type, amount             +amount starting ammo of that type per purchase
 //   health: n / armor: n           +n starting health / armor per purchase
-//   key: id of KEYS                you start every run holding that keycard
 //   pickup: id of PICKUPS          a CONSUMABLE: buying adds one to your stock (max STORE_MAX_STOCK); `hotkey` uses one in the run: it
 //                                  does what the old pickup did (heal, armor, timed power-up from TUNING.powerTicks ...)
 //   ammoPack: true                 a consumable that refills the CURRENT weapon's ammo type by one old ammo pickup's worth
 // The prices below are first guesses: tune them to how many points a run earns.
-const STORE_CATS = ['WEAPONS', 'AMMO', 'SURVIVAL', 'KEYS', 'ITEMS'];
+const STORE_CATS = ['WEAPONS', 'AMMO', 'SURVIVAL', 'ITEMS'];
 const STORE_MAX_STOCK = 9;
 const STORE = [
   { id: 'pistol', cat: 'WEAPONS', weapon: 'pistol', price: 500, desc: 'Starts with 100 bullets' },
@@ -234,9 +233,6 @@ const STORE = [
   { id: 'ammo_cells', cat: 'AMMO', ammo: 'cells', amount: 40, price: 250, growth: 0.25, desc: '+40 starting cells (plasma rifle, BFG)' },
   { id: 'health', cat: 'SURVIVAL', name: 'MAX HEALTH', health: 10, price: 200, growth: 0.25, desc: '+10 starting health' },
   { id: 'armor', cat: 'SURVIVAL', name: 'BODY ARMOR', armor: 25, price: 300, growth: 0.5, max: 4, desc: '+25 starting armor' },
-  { id: 'key_blue', cat: 'KEYS', key: 'blue', price: 400, desc: 'Opens the blue doors' },
-  { id: 'key_red', cat: 'KEYS', key: 'red', price: 1000, desc: 'Opens the red doors' },
-  { id: 'key_yellow', cat: 'KEYS', key: 'yellow', price: 2000, desc: 'Opens the yellow doors' },
   { id: 'berserk', cat: 'ITEMS', name: 'BERSERK', pickup: 'berserk', hotkey: 'z', price: 400, desc: '+100 health, double damage for 60s' },
   { id: 'invuln', cat: 'ITEMS', name: 'INVULNERABILITY', pickup: 'invuln', hotkey: 'x', price: 800, desc: 'No damage for 30s' },
   { id: 'radsuit', cat: 'ITEMS', name: 'RADIATION SUIT', pickup: 'radsuit', hotkey: 'c', price: 300, desc: 'Nukage does not hurt for 60s' },
@@ -292,6 +288,7 @@ const TUNING = {
   painTicks: 6,
   hazard: { damage: 2, interval: 15, label: 'NUKAGE!' },
   powerTicks: { invuln: 750, radsuit: 1500, berserk: 1500 },
+  checkpointHeal: 50,   // health you get when a map-placed Arch-vile dies (also a CHECKPOINT, see `checkpoint`); never above 100 (or what you already have)
   freezeGraceTicks: 50,
   spawnWarningTicks: 14,   // about half a second
   itemGrowth: 20,   // pickups, projectiles and effects grow as you approach, up to this many times their picture size. High on purpose: a low cap (it was 4) made big things such as the scale-3 explosions stop growing about 4 tiles away while the walls kept growing, so they looked smaller up close
@@ -358,6 +355,8 @@ const KEYS = {
   blue: { name: 'BLUE KEYCARD', hud: 'BLUE', color: '#44f', tag: '\x08', doorChar: 'K', pickupChar: 'b' },
   red: { name: 'RED KEYCARD', hud: 'RED', color: '#f44', tag: '\x18', doorChar: 'R', pickupChar: 'e' },
   yellow: { name: 'YELLOW KEYCARD', hud: 'YELLOW', color: '#fd0', tag: '\x19', doorChar: 'W', pickupChar: 'w' },
+  green: { name: 'GREEN KEYCARD', hud: 'GREEN', color: '#4d4', tag: '\x06', doorChar: 'F', pickupChar: 'f' },
+  purple: { name: 'PURPLE KEYCARD', hud: 'PURPLE', color: '#c5f', tag: '\x09', doorChar: 'Q', pickupChar: 'q' },
 };
 
 // ─── WEAPONS ────────────────────────────────────────────────────────────────
@@ -950,6 +949,7 @@ export async function main(ns) {
   //     w: weapons you started with, ch: true if cheat flags were on }
   // Read at start, written whenever a run ends. A missing or unreadable file means a fresh start; an older file holding just a number
   // is read as the death count. The end screen shows the last few runs as bars, and H opens the full history (see historyLines).
+  const REFUNDED_ITEMS = { key_blue: 400, key_red: 1000, key_yellow: 2000 };   // store items that no longer exist, with what they cost
   let deaths = 0, runs = [], points = 0, buys = {}, inv = {};
   const cleanCounts = o => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).map(([k, v]) => [k, Math.max(0, Math.floor(Number(v)) || 0)]).filter(([k, v]) => v > 0 && STORE.some(i => i.id === k)));
   if (!flags.reset) {
@@ -959,6 +959,7 @@ export async function main(ns) {
         const o = JSON.parse(raw);
         deaths = Math.max(0, Math.floor(Number(o.deaths)) || 0);
         points = Math.max(0, Math.floor(Number(o.points)) || 0); buys = cleanCounts(o.buys); inv = cleanCounts(o.inv);
+        for (const [id, price] of Object.entries(REFUNDED_ITEMS)) if (o.buys?.[id]) points += price;   // keycards used to be for sale: give the points back
         runs = Array.isArray(o.runs) ? o.runs.filter(x => x && typeof x === 'object' && Number.isFinite(x.sc) && Number.isFinite(x.t)) : [];
       } else deaths = Math.max(0, parseInt(raw, 10) || 0);
     } catch (e) { deaths = 0; runs = []; points = 0; buys = {}; inv = {}; }
@@ -987,7 +988,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '96';
+  const VERSION = '99';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1502,9 +1503,9 @@ export async function main(ns) {
   // `points`, saves, and applies at once (buyItem). storeSel is the selected row of the current tab; storeMsg the last result.
   let storeEl = null, storeResume = false, storeTab = 0, storeSel = 0, storeMsg = '';
   const storeItems = () => STORE.filter(i => i.cat === STORE_CATS[storeTab]);
-  const itemName = i => i.name || (i.weapon ? WEAPONS[i.weapon]?.name : i.key ? KEYS[i.key].name : i.ammo ? AMMO_TYPES[i.ammo].name : i.id.toUpperCase());
+  const itemName = i => i.name || (i.weapon ? WEAPONS[i.weapon]?.name : i.ammo ? AMMO_TYPES[i.ammo].name : i.id.toUpperCase());
   const itemPrice = i => Math.round(i.price * (1 + (i.growth || 0) * bought(i.id)));
-  const itemMax = i => i.max ?? (i.weapon || i.key ? 1 : i.hotkey ? STORE_MAX_STOCK : Infinity);
+  const itemMax = i => i.max ?? (i.weapon ? 1 : i.hotkey ? STORE_MAX_STOCK : Infinity);
   const itemCount = i => (i.hotkey ? inv[i.id] : bought(i.id)) || 0;
   function buyItem(item) {
     if (itemCount(item) >= itemMax(item)) { storeMsg = item.hotkey ? 'STOCK FULL' : 'ALREADY OWNED'; return; }
@@ -1522,7 +1523,6 @@ export async function main(ns) {
     if (item.ammo) ammo[item.ammo] += item.amount;
     if (item.health) health += item.health;
     if (item.armor) armor += item.armor;
-    if (item.key) heldKeys.add(item.key);
     saveDirty = true;   // (never call ns.* from a key/click handler, see saveDirty)
     play(SOUNDS.weaponPickup, 0.8);
     storeMsg = `BOUGHT ${itemName(item)}`;
@@ -2348,6 +2348,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
         if (need && pr.alive && pr.kidKills === need) flash('SHIELD DOWN!', 40, 'boss');
       }
       if (def.sounds.death) playAt(def.sounds.death, e.x, e.y, 1.0);
+      if (e.spawnIdx !== undefined && def.summoner && def.invulnerable) reachCheckpoint(e);   // a map Arch-vile fell
     }
 
     const sp = projectSprite(e.x, e.y);
@@ -2964,7 +2965,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   // Grid cells are either a plain glyph or "<colour tag char><glyph>"
   // Colour tags: a tag is a control character placed in front of a glyph. Every tag used anywhere (KEYS[].tag, PICKUPS
   // glyph[0], PROJECTILES blob.tag, the literals in renderFrame) must have an entry here, or its colour is silently lost
-  // and the tag character leaks into the HTML. Keep tags unique per meaning. \x06, \x09 and \x1F are currently unused.
+  // and the tag character leaks into the HTML. Keep tags unique per meaning. \x1F is currently unused.
   // decodeCell() also colours the floor characters in FLOOR_CHARS and the middle dot grey without a tag.
   // The glyph after a tag must be one UTF-16 unit because decodeCell() uses slice(1).
   const CELL_COLORS = {
@@ -2978,6 +2979,8 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     '\x05': '#ccc',  // bullets (enemy pellets and where they land)
     '\x07': '#555',  // minimap wall / automap outline
     '\x04': '#99b',  // automap: explored wall
+    '\x06': '#4d4',  // green door / key
+    '\x09': '#c5f',  // purple door / key
     '\x08': '#88f',  // blue door / key
     '\x0A': '#0f0',  // player arrow
     '\x0B': '#ff0',  // exit
@@ -3468,6 +3471,34 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
 
   // Builds the runtime record of one enemy (see the enemy record notes in GAME STATE). Used by startLevel() for the
   // enemies placed in the map and by trySpawn() for summoned ones; hit points are scaled by the difficulty.
+  // CHECKPOINTS AND THE WIN. When a map-placed Arch-vile (a summoner with a shield, placed by a map character, so e.spawnIdx is set) dies, you get
+  // TUNING.checkpointHeal health and the NEXT keycard in KEYS order (blue, red, yellow, green, purple) that you do not hold yet. The map is built so that
+  // the door in front of each Arch-vile's area takes the key the previous Arch-vile drops (the first Arch-vile needs no key), so they fall in a fixed order.
+  // `checkpoint` remembers this level, which Arch-viles are dead (their index in spawns.enemies) and the keys you hold. After you die, startLevel(.., 'retry')
+  // puts you back at the START of the level (so you can use the store first) with the dead Arch-viles missing and those keys kept. 'fresh' and 'next'
+  // (a new game, a new level) clear it. It lives only while the script runs. The level is WON when every Arch-vile it placed is dead (there is no exit
+  // tile on the first map any more; see winLevel).
+  let checkpoint = null, avTotal = 0;   // avTotal: how many Arch-viles the level placed (0 = the level has none, so killing them is not its goal)
+  function reachCheckpoint(e) {
+    const dead = [...(checkpoint?.level === levelIndex ? checkpoint.dead : []), e.spawnIdx];
+    health = Math.min(Math.max(STAT_MAX.health, health), health + TUNING.checkpointHeal);
+    const nextKey = Object.keys(KEYS).find(k => !heldKeys.has(k));
+    if (nextKey) heldKeys.add(nextKey);
+    checkpoint = { level: levelIndex, dead, keys: [...heldKeys] };
+    if (avTotal && !enemies.some(x => x.spawnIdx !== undefined && x.alive)) { winLevel('ALL ARCH-VILES DEAD!'); return; }
+    play(SOUNDS.weaponPickup, 0.8);
+    flash(`CHECKPOINT!  +${TUNING.checkpointHeal} HEALTH${nextKey ? '  ' + KEYS[nextKey].name : ''}`, 60, 'secret');
+    updateHud();
+  }
+  // Ends the level as won: +1000, recorded in the run history. Called when the last Arch-vile dies, and when you step on an exit tile (TILE.EXIT, an 'E' in a map;
+  // the first level has none now, but the tile still works).
+  function winLevel(text) {
+    if (won || gameOver) return;
+    won = true; endTime = Date.now(); score += 1000;
+    recordRun('WON');   // winning does not reset anything: the history and your points carry on
+    flash(`${text || LEVELS[levelIndex].name.split(':')[0] + ' COMPLETE!'} +1000`, 9999);
+    updateHud();
+  }
   function makeEnemy(type, x, y) {
     const hp = Math.max(1, Math.round(ENEMIES[type].hp * DIFFICULTIES[difficulty].enemyHp));
     return {
@@ -3884,10 +3915,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     } else hazardTimer = 0;
     // ── Exit check ───────────────────────────────────────────────────────
     if (tileAt(px, py) === TILE.EXIT) {
-      won = true; endTime = Date.now(); score += 1000;
-      recordRun('WON');   // winning does not reset anything: the history and the death-based bonuses carry on
-      flash(`${LEVELS[levelIndex].name.split(':')[0]} COMPLETE! +1000`, 9999);
-      updateHud();
+      winLevel();
     }
 
     // ── Enemy AI ─────────────────────────────────────────────────────────
@@ -3972,7 +4000,6 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
 
     px = spawns.player.x; py = spawns.player.y; pa = -Math.PI / 2;
     heldKeys.clear();
-    for (const i of STORE) if (i.key && bought(i.id)) heldKeys.add(i.key);   // bought keycards
     for (const k in powers) powers[k] = 0;
     kills = 0; summonedTotal = 0; secretsFound = 0;
     shootCooldown = 0; useCooldown = 0; muzzleFlash = 0; afterglow = 0; faceHitTimer = 0; hazardTimer = 0; mouseTurn = 0; freezeGrace = 0;
@@ -3983,7 +4010,15 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     frameWallTile.fill(TILE.WALL); frameWallIdx.fill(0);
 
     enemies.length = 0;
-    for (const s of spawns.enemies) enemies.push(makeEnemy(s.type, s.x, s.y));
+    if (mode !== 'retry' || checkpoint?.level !== index) checkpoint = null;   // only a retry after dying keeps the checkpoint (see reachCheckpoint)
+    spawns.enemies.forEach((s, i) => {
+      if (checkpoint?.dead.includes(i)) return;   // an Arch-vile you already killed stays dead
+      const e = makeEnemy(s.type, s.x, s.y);
+      if (ENEMIES[s.type].summoner && ENEMIES[s.type].invulnerable) e.spawnIdx = i;
+      enemies.push(e);
+    });
+    if (checkpoint) for (const k of checkpoint.keys) heldKeys.add(k);
+    avTotal = spawns.enemies.filter(s => ENEMIES[s.type].summoner && ENEMIES[s.type].invulnerable).length;
     pickups.length = 0;
     for (const p of spawns.pickups) pickups.push({ ...p, alive: true });
     decor.length = 0;
