@@ -228,6 +228,8 @@ const DEFAULT_DIFFICULTY = 'normal';
 //   hazard                         damage taken every `interval` ticks while standing in nukage
 //   powerTicks                     duration of each timed power-up (see POWERUPS in PICKUPS)
 //   itemGrowth                     how many times bigger than its picture a non-enemy sprite (terminal, torch, pickup, fireball, explosion) gets as you come close
+//   rangedReachView                true: ranged enemy attacks (and your pistol/shotgun/chaingun shots) reach as far as you can see (VIEW_DIST, up to 32
+//                                  tiles), so if you can see each other both sides can shoot. false: use each attack's own range max.
 //   useRange                       how far ahead (tiles) F can open a door or push a secret wall (it also tries a little to each side)
 //   terminalUrl / terminalRange    the page a TERMINAL decoration opens (see DECORATIONS `use`) and how close (tiles) you must stand
 //   spawnWarningTicks              how long the fire-spike warning shows before a spawner's (Pain Elemental, Arch-vile) enemy appears
@@ -245,6 +247,7 @@ const TUNING = {
   freezeGraceTicks: 50,
   spawnWarningTicks: 14,   // about half a second
   itemGrowth: 4,   // decorations, pickups, projectiles and effects grow as you approach, up to this many times their picture size
+  rangedReachView: true,   // ranged attacks and hitscan shots reach the whole view distance (see above)
   useRange: 2.0,   // how far ahead (tiles) F can reach a door or secret wall
   terminalUrl: 'https://bitburner-official.github.io/',   // web version of Bitburner, opened by the terminal in the level
   terminalRange: 1.8,
@@ -504,7 +507,8 @@ const PROJECTILES = {
 //               everything else stands on the floor), fall: how far a FLYING corpse sinks, corpse: false = vanishes after dying }
 //  sounds     { hurt, death }
 //  attacks    list of attacks, each rolls independently every tick:
-//               { kind: 'ranged' | 'melee', range: [min, max] tiles, chance: per tick, sound, volume,
+//               { kind: 'ranged' | 'melee', range: [min, max] tiles (a ranged attack's max is ignored while TUNING.rangedReachView is on: it reaches as far
+//                 as the view distance, so anything that can see you can shoot you), chance: per tick, sound, volume,
 //                 animate: false to skip the attack animation }
 //               ranged: projectile (key of PROJECTILES), count, spread, damage (overrides the projectile's),
 //                       muzzles: [sideways offsets in tiles] fires ONE shot from each offset (negative = the enemy's left
@@ -863,7 +867,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '64';
+  const VERSION = '65';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -2045,7 +2049,7 @@ export async function main(ns) {
     if (sp) damageNumbers.push({ screenX: sp.screenX, screenY: Math.floor((H - sp.h) / 2) - 1, val: damage, ttl: 20 });
   }
 
-  // Each pellet marches from the player in 0.15-tile steps for at most 100 steps (15 tiles), stopping at the first
+  // Each pellet marches from the player in 0.15-tile steps for at most 100 steps (15 tiles), or the whole view distance when TUNING.rangedReachView is on, stopping at the first
   // wall or at the first living enemy whose square hitbox contains the point. Spread is a uniform random angle. There
   // is no per-pellet damage falloff.
   function fireHitscan(wpn) {
@@ -2053,7 +2057,8 @@ export async function main(ns) {
       const spreadAngle = pa + (Math.random() - 0.5) * wpn.spread;
       const dx = Math.cos(spreadAngle), dy = Math.sin(spreadAngle);
       let rx = px, ry = py;
-      for (let i = 0; i < 100; i++) {
+      const steps = TUNING.rangedReachView ? Math.ceil(VIEW_DIST / 0.15) + 1 : 100;   // 0.15 tiles per step (100 steps = 15 tiles)
+      for (let i = 0; i < steps; i++) {
         rx += dx * 0.15; ry += dy * 0.15;
         if (solidAt(rx, ry)) break;
 
@@ -3340,7 +3345,8 @@ export async function main(ns) {
     // Attacks: each one rolls independently every tick (difficulty scales the chance)
     const aggression = DIFFICULTIES[difficulty].enemyChance;
     for (const atk of def.attacks) {
-      if (dist < atk.range[0] || dist >= atk.range[1]) continue;
+      const maxRange = atk.kind === 'ranged' && TUNING.rangedReachView ? Math.max(atk.range[1], VIEW_DIST) : atk.range[1];   // ranged: anywhere in view
+      if (dist < atk.range[0] || dist >= maxRange) continue;
       if (Math.random() >= atk.chance * aggression || !los()) continue;
       enemyAttack(e, atk);
     }

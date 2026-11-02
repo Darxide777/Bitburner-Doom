@@ -171,6 +171,10 @@ just a new table entry. Each table has a comment explaining its fields.
    centre, e.g. one fireball out of each arm. A projectile can also have `freeze: ticks`: an enemy shot that hits the
    player stops them walking for that long (25 ticks = 1 second; the Cryobus uses 75). The HUD shows FROZEN with a
    countdown, and `TUNING.freezeGraceTicks` (default 50) is the window after thawing in which you can't be frozen again.
+5b. Reach: with `TUNING.rangedReachView` on (the default), ranged attacks and your bullet weapons reach as far as the view
+   distance (up to 32 tiles), so if you can see an enemy it can shoot you and the other way round. The `range` max of a ranged
+   attack is then ignored (its min still applies); melee and spawn attacks keep their ranges. Set it to `false` to go back to
+   the per-attack ranges.
 6. A spawner uses an attack with `kind: 'spawn'` instead of a projectile or melee hit (see the Pain Elemental and
    Arch-vile entries). The enemy does not appear at once: a fire-spike warning (`Spawn_Warning_idle1`, `_idle2`, shared by every
    spawner) shows at the spot for `TUNING.spawnWarningTicks` (default 14, about half a second) first; ASCII sparks are used
