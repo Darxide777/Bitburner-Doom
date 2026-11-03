@@ -199,10 +199,12 @@ const LEVELS = [
       // Pace: how the difficulty (the round) moves with how you play, so it follows your skill. After a WIN (t = clear time in seconds):
       //   step         [[maxSeconds, rounds gained]]  the first row with maxSeconds >= t. Slow clears (over 4 minutes) gain nothing, so the next room is the same difficulty (it is still a clear: weapon unlocks count it)
       //   lowHealth    { below, mult }  finishing with less than `below` of your max health multiplies the step by `mult` (you struggled)
+      //   pointsRate   share of the score an ARENA run banks as points (wins and deaths)
       //   pointsMult   [[maxSeconds, multiplier]]  the points a clear pays: fast clears pay more
       //   ease         { after, perDeath }  from the `after`-th death in a row on the same room, each death takes `perDeath` rounds off the difficulty
       pace: {
-        step: [[120, 1.5], [180, 1.25], [240, 1], [Infinity, 0]],
+        step: [[100, 1], [160, 0.75], [240, 0.5], [Infinity, 0]],   // (tuned from the 20-run log: the old 1.5/1.25/1 steps outran the store, and everything was bought out by round 14)
+        pointsRate: 0.2,   // ARENA points = this share of the score (kills of summons add up fast, so score alone paid ~70k per clear and the store was bought out in 20 runs)
         lowHealth: { below: 0.25, mult: 0.5 },
         pointsMult: [[120, 1.5], [240, 1], [Infinity, 0.75]],
         ease: { after: 2, perDeath: 0.3 },
@@ -264,11 +266,11 @@ const STORE = [
   { id: 'buff_regen', cat: 'UPGRADES', name: 'REGENERATION', buff: 'regen', per: 0.5, price: 800, growth: 0.5, max: 6, desc: '+0.5 health per second (up to your max health)' },
   { id: 'buff_turn', cat: 'UPGRADES', name: 'TURN SPEED', buff: 'turn', per: 0.10, price: 300, growth: 0.5, max: 6, desc: '+10% turning speed (keys and mouse)' },
   { id: 'buff_powertime', cat: 'UPGRADES', name: 'POWER-UP TIME', buff: 'powertime', per: 0.15, price: 500, growth: 0.5, max: 6, desc: '+15% duration of berserk, invulnerability and the radiation suit' },
-  { id: 'ammo_bullets', cat: 'AMMO', ammo: 'bullets', amount: 50, price: 100, growth: 0.25, desc: '+50 starting bullets (pistol, chaingun)' },
-  { id: 'ammo_shells', cat: 'AMMO', ammo: 'shells', amount: 8, price: 150, growth: 0.25, desc: '+8 starting shells (shotgun)' },
-  { id: 'ammo_rockets', cat: 'AMMO', ammo: 'rockets', amount: 4, price: 200, growth: 0.25, desc: '+4 starting rockets (rocket launcher)' },
-  { id: 'ammo_cells', cat: 'AMMO', ammo: 'cells', amount: 40, price: 250, growth: 0.25, desc: '+40 starting cells (plasma rifle)' },
-  { id: 'ammo_bfgcells', cat: 'AMMO', ammo: 'bfgcells', amount: 1, price: 3000, growth: 0.5, desc: '+1 starting BFG cell (one BFG shot)' },
+  { id: 'ammo_bullets', cat: 'AMMO', ammo: 'bullets', amount: 50, price: 100, growth: 0.25, max: 10, desc: '+50 starting bullets (pistol, chaingun)' },
+  { id: 'ammo_shells', cat: 'AMMO', ammo: 'shells', amount: 8, price: 150, growth: 0.25, max: 10, desc: '+8 starting shells (shotgun)' },
+  { id: 'ammo_rockets', cat: 'AMMO', ammo: 'rockets', amount: 4, price: 200, growth: 0.25, max: 10, desc: '+4 starting rockets (rocket launcher)' },
+  { id: 'ammo_cells', cat: 'AMMO', ammo: 'cells', amount: 40, price: 250, growth: 0.25, max: 10, desc: '+40 starting cells (plasma rifle)' },
+  { id: 'ammo_bfgcells', cat: 'AMMO', ammo: 'bfgcells', amount: 1, price: 3000, growth: 0.5, max: 8, desc: '+1 starting BFG cell (one BFG shot)' },
   { id: 'health', cat: 'SURVIVAL', name: 'MAX HEALTH', health: 10, price: 200, growth: 0.5, max: 20, desc: '+10 starting health' },
   { id: 'armor', cat: 'SURVIVAL', name: 'BODY ARMOR', armor: 25, price: 300, growth: 0.5, max: 4, desc: '+25 starting armor' },
   { id: 'berserk', cat: 'ITEMS', name: 'BERSERK', pickup: 'berserk', hotkey: 'z', price: 400, desc: '+100 health, double damage for 60s' },
@@ -1045,7 +1047,10 @@ export async function main(ns) {
     return st;
   };
   function recordRun(result) {
-    lastGain = CHEATING ? 0 : Math.max(0, score - bankedScore); bankedScore = score; points += lastGain;   // (cheat flags earn no points)
+    lastGain = CHEATING ? 0 : Math.max(0, score - bankedScore); bankedScore = score;
+    const rate = LEVELS[levelIndex].arena?.pace?.pointsRate;
+    if (rate != null) lastGain = Math.round(lastGain * rate);   // (ARENA: only part of the score becomes points)
+    points += lastGain;   // (cheat flags earn no points)
     const t = Math.max(0, Math.floor(((endTime || Date.now()) - gameStartTime) / 1000));
     if (LEVELS[levelIndex].arena && result === 'WON') {
       arenaStep = arenaStepFor(t, health / Math.max(1, maxHealthNow()));   // how much harder the next room gets depends on how fast and how cleanly you won
@@ -1076,7 +1081,7 @@ export async function main(ns) {
   // the first VERSION declaration it finds, and if that is higher than this file's it prints a message telling the
   // player to run install.js (which downloads everything). Nothing is written or restarted. Any failure (offline, slow,
   // blocked) is silently ignored: the check never stops the game. Bump VERSION on every release or nobody is told.
-  const VERSION = '126';
+  const VERSION = '128';
   const REPO_USER = 'Darxide777';
   const REPO_NAME = 'Bitburner-Doom';
   const BRANCH = 'main';
@@ -1373,6 +1378,8 @@ export async function main(ns) {
   let freezeGrace = 0;
   let levelIndex = 0, levelStart = null;   // index into LEVELS; snapshot of the loadout when the level began (for retry)
   let difficulty = DEFAULT_DIFFICULTY;     // key of DIFFICULTIES, chosen on the title screen
+  // The difficulty settings in force: the chosen one, except in the ARENA, which ignores the title-screen choice (its own difficulty adjusts to how you play, see `pace`) and always uses 'normal'.
+  const diffCfg = () => (LEVELS[levelIndex].arena ? DIFFICULTIES.normal : DIFFICULTIES[difficulty]);
   let hazardTimer = 0, mouseTurn = 0;      // ticks until nukage hurts again; mouse movement not yet applied to pa
   const heldKeys = new Set();     // ids from KEYS
   let gameOver = false, won = false, showMap = false, showHistory = false;   // showHistory: the end screen is showing the full run history (H)
@@ -1856,7 +1863,7 @@ export async function main(ns) {
     if (g.health) health = Math.min(Math.max(STAT_MAX.health, health), health + g.health);   // (health above the cap from store purchases is kept)
     if (g.armor) armor = Math.min(Math.max(STAT_MAX.armor, armor), armor + g.armor);
     if (g.ammo) {
-      const scale = DIFFICULTIES[difficulty].ammoPickup;
+      const scale = diffCfg().ammoPickup;
       for (const [type, n] of Object.entries(g.ammo)) ammo[type] = Math.min(Math.max(AMMO_TYPES[type].max, ammo[type]), ammo[type] + Math.round(n * scale));   // (ammo above the cap from store purchases is kept)
     }
     if (g.key) heldKeys.add(g.key);
@@ -1877,7 +1884,7 @@ export async function main(ns) {
   function takeDamage(dmg, bypassArmor = false) {
     if (INFINITE_HEALTH || powers.invuln > 0) return 0;
 
-    let actualDamage = dmg * DIFFICULTIES[difficulty].damageTaken;
+    let actualDamage = dmg * diffCfg().damageTaken;
 
     // Armor soaks up to half of each hit, and is used up by exactly the amount it soaked
     if (!bypassArmor && armor > 0) {
@@ -3213,7 +3220,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     flatCanvas.style.display = 'none';
     pre.innerHTML = '';
     for (const [rawText, color] of TITLE_LINES) {
-      const text = rawText === '@DIFFICULTY' ? `<  DIFFICULTY: ${DIFFICULTIES[difficulty].name}  >` : rawText === '@LEVEL' ? (LEVELS.length > 1 ? `^  LEVEL: ${LEVELS[selLevel].name}  v` : LEVELS[selLevel].name) : rawText;
+      const text = rawText === '@DIFFICULTY' ? (LEVELS[selLevel].arena ? '   DIFFICULTY: AUTOMATIC' : `<  DIFFICULTY: ${DIFFICULTIES[difficulty].name}  >`) : rawText === '@LEVEL' ? (LEVELS.length > 1 ? `^  LEVEL: ${LEVELS[selLevel].name}  v` : LEVELS[selLevel].name) : rawText;
       if (!text) { pre.appendChild(doc.createTextNode('\n')); continue; }
       const line = center(text);
       const rc = color === 'BLINK' ? (blink ? '#ff0' : '#440') : color;
@@ -3685,7 +3692,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
   const avKills = () => (checkpoint?.level === levelIndex ? checkpoint.dead.length : 0);
   const threatMult = (stat, n = avKills()) => 1 + TUNING.threat[stat] * n;
   function makeEnemy(type, x, y) {
-    const hp = Math.max(1, Math.round(ENEMIES[type].hp * DIFFICULTIES[difficulty].enemyHp * threatMult('hp') * arenaStat('hp')));
+    const hp = Math.max(1, Math.round(ENEMIES[type].hp * diffCfg().enemyHp * threatMult('hp') * arenaStat('hp')));
     const shieldNeed = def0 => { const A = LEVELS[levelIndex].arena; return def0.invulnerable && A?.shield ? def0.invulnerable.kills + Math.round(A.shield.perRound * runRound) : undefined; };   // (ARENA: an Arch-vile needs more summon kills each round)
     return {
       shieldNeed: shieldNeed(ENEMIES[type]),
@@ -3931,7 +3938,7 @@ const AUTOMAP_EXPLORE_TICKS = 6;    // re-scan at least this often even when sta
     } else if (roaming && spd > 0) wanderSummoner(e, def, spd);   // strayed past its roam limit (fleeing): wander homes it back
 
     // Attacks: each one rolls independently every tick (difficulty scales the chance)
-    const aggression = DIFFICULTIES[difficulty].enemyChance * arenaStat('fire');
+    const aggression = diffCfg().enemyChance * arenaStat('fire');
     for (const atk of def.attacks) {
       const anywhere = roaming && atk.kind === 'spawn';   // an active summoner summons whether or not you are near or in view
       const maxRange = atk.kind === 'ranged' && TUNING.rangedReachView ? Math.max(atk.range[1], VIEW_DIST) : atk.range[1];   // ranged: anywhere in view

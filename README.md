@@ -40,7 +40,7 @@ Settings are flags you add when you start the script, for example `run doom.js -
 Flags can be combined in any order. An unknown flag is reported and ignored. A web-page converter has to provide `ns.flags`;
 without it every flag is off.
 
-On the title screen use **Left/Right** to pick the difficulty (easy, normal, hard) and **Enter** or **Space** to start.
+On the title screen use **Left/Right** to pick the difficulty (easy, normal, hard; HANGAR only: the ARENA ignores it, its difficulty adjusts to how you play) and **Enter** or **Space** to start.
 
 ## Controls
 
@@ -76,7 +76,7 @@ within 16 tiles of you (`AUTOMAP_ITEM_RADIUS`), weapons, armor and power-ups nev
 
 ## Choosing a level
 
-On the title screen, **Up/Down choose the level** and Left/Right the difficulty. There are two: **ARENA** (the default: one big room that gets harder every time you clear it, also the benchmark) and **HANGAR** (E1M1, the Doom-style map in `map.txt`). Winning a level offers to play the same one again; the levels are separate maps, not an episode. Your points, purchases and unlocks are shared by both.
+On the title screen, **Up/Down choose the level** and Left/Right the difficulty (HANGAR only: the ARENA always plays as normal and adjusts itself, see below). There are two: **ARENA** (the default: one big room that gets harder every time you clear it, also the benchmark) and **HANGAR** (E1M1, the Doom-style map in `map.txt`). Winning a level offers to play the same one again; the levels are separate maps, not an episode. Your points, purchases and unlocks are shared by both.
 
 ## ARENA (the benchmark level)
 
@@ -87,9 +87,9 @@ The ARENA has no map file: **the game generates it every time you enter it.** It
   **Clear the room (every enemy dead, summons included) to win.** The BFG is the tool for the summons (see Weapons).
 
 **Every clear makes the next round harder, by an amount that depends on how you played** (`pace` in the ARENA entry of `LEVELS`; the difficulty is saved in `doom_progress.txt`, `--reset` zeroes it, and it can be fractional, e.g. "round 7.5"):
-- **Clear time:** under 2 minutes +1.5, under 3 minutes +1.25, under 4 minutes +1, **over 4 minutes +0** (you retry the same difficulty; the clear still counts for weapon unlocks).
+- **Clear time:** under 100 seconds +1, under 160 seconds +0.75, under 4 minutes +0.5, **over 4 minutes +0** (you retry the same difficulty; the clear still counts for weapon unlocks).
 - **Health:** finishing with under 25% of your max health halves that step.
-- **Points:** a clear under 2 minutes pays 1.5x the points, over 4 minutes 0.75x.
+- **Points:** ARENA runs bank 20% of their score as points (`pointsRate`; kills of summons make the raw score huge). A clear under 2 minutes pays 1.5x that, over 4 minutes 0.75x.
 - **Deaths:** dying does not raise the difficulty, and from the 2nd death in a row on the same room each death takes 0.3 off it until you win.
 Every round is meant to be winnable, but the later ones should take a few tries and some store upgrades (the weapon unlocks go by whole rooms cleared, not by the difficulty). Every round is meant to be winnable, but the later ones should take a few tries and some store upgrades. Per round, all enemies get: **+10% hit points, +6% damage to you,
 +5% attack rate** (this also makes summoners summon more often), **+3% shot speed** (up to 2x), **+3% walking speed** (up to 2x) and **+8% summoning**: how many enemies a summoner may have alive,
@@ -137,7 +137,7 @@ Enter (or B) buys, Esc closes; or click a tab, a row or its BUY button. Purchase
 |---|---|
 | WEAPONS | pistol, shotgun, chaingun, rocket launcher, plasma rifle, BFG 9000 (each starts with some ammo; you always have the chainsaw). The pistol and shotgun are for sale from the start; **the rest are locked until you kill Arch-viles** (on HANGAR the boss counts as the first): the 1st unlocks the chaingun, the 2nd the rocket launcher, the 3rd the plasma rifle and the 4th the BFG. **On the ARENA the unlocks come from clearing rooms instead: every second clear unlocks the next weapon** (clear 2 the chaingun, 4 the rocket launcher, 6 the plasma rifle, 8 the BFG).  Dying unlocks nothing. The best unlock level you reach on either is saved, so an unlock is permanent |
 | UPGRADES | permanent buffs, each level adds to the last (the price rises 50% per level): **DAMAGE** +10% damage with every weapon (10 levels), **FIRE RATE** +10% shots per second (8 levels), **MOVEMENT SPEED** +5% walking and strafing speed (6 levels), **REGENERATION** +0.5 health per second up to the max health you have bought (6 levels), **TURN SPEED** +10% turning speed with keys and mouse (6 levels), **POWER-UP TIME** +15% duration of berserk, invulnerability and the radiation suit (6 levels). They apply at once and to every later run; `buff` and `per` in the `STORE` table |
-| AMMO | extra starting ammo for each type (+50 bullets, +8 shells, +4 rockets, +40 cells, +1 BFG cell per purchase; the price rises 25% each time, 50% for the BFG cell, which also costs 3,000 and the BFG itself 40,000 before the store's price multiplier) |
+| AMMO | extra starting ammo for each type (+50 bullets, +8 shells, +4 rockets, +40 cells, +1 BFG cell per purchase; the price rises 25% each time, up to 10 purchases each; 50% and up to 8 for the BFG cell, which also costs 3,000 and the BFG itself 40,000 before the store's price multiplier) |
 | SURVIVAL | +10 starting health (up to 20 times, the price rises 50% each time), +25 starting armor (up to 4 times) |
 | ITEMS | consumables kept in stock (up to 9 each) and used in a run with a key: **Z** Berserk (+100 health, double damage 60s), **X** Invulnerability (30s), **C** Radiation suit (60s), **V** Medkit (+25), **B** Armor vest (+50), **N** Ammo pack (refills the weapon in your hands) |
 
